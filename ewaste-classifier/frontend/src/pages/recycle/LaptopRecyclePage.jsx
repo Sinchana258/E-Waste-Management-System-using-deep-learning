@@ -89,6 +89,9 @@ const LaptopRecyclePage = () => {
   const [models, setModels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastBookingSummary, setLastBookingSummary] = useState(null);
+
   const currentDate = new Date().toISOString().split("T")[0];
 
   const handleBrandChange = (e) => {
@@ -137,17 +140,33 @@ const LaptopRecyclePage = () => {
     try {
       setIsLoading(true);
 
-      const response = await fetch(
-        "https://elocate-server.onrender.com/api/v1/booking", // TODO: change if you use your own backend
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newBooking),
-        }
-      );
+      const response = await fetch("http://localhost:8000/api/v1/booking", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newBooking),
+      });
+
 
       if (response.ok) {
-        toast.success("Submitted successfully!", { autoClose: 3000 });
+        // ✨ Build a small summary for the modal
+        const summary = {
+          recycleItem,
+          pickupDate,
+          pickupTime,
+          facility: selectedFacility,
+          address,
+          userEmail: email,
+        };
+
+        setLastBookingSummary(summary);
+        setShowSuccessModal(true);
+
+        // ✅ nicer toast
+        toast.success("Booking confirmed! A confirmation email has been sent.", {
+          autoClose: 3000,
+        });
         setSelectedBrand("");
         setSelectedModel("");
         setSelectedFacility("");
@@ -158,10 +177,12 @@ const LaptopRecyclePage = () => {
         setFullName("");
         setEmail("");
         setPhone("");
-        setModels([]);
+        setIsLoading(false);
+
       } else {
         toast.error("Error submitting data.", { autoClose: 3000 });
       }
+
     } catch (err) {
       console.error(err);
       toast.error("Error submitting data.", { autoClose: 3000 });
@@ -390,6 +411,60 @@ const LaptopRecyclePage = () => {
           </button>
         </div>
       </form>
+      {showSuccessModal && lastBookingSummary && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-fade-in-up">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                <span className="text-3xl">✅</span>
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+              Booking Confirmed!
+            </h2>
+            <p className="text-center text-gray-600 mb-4">
+              We’ve sent a confirmation email to{" "}
+              <span className="font-semibold">{lastBookingSummary.userEmail}</span>.
+            </p>
+
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm space-y-2">
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Item</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.recycleItem}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Slot</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.pickupDate} at {lastBookingSummary.pickupTime}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Facility</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.facility}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Pickup Address</span>
+                <p className="text-gray-800 text-right">
+                  {lastBookingSummary.address}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition-colors duration-200"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

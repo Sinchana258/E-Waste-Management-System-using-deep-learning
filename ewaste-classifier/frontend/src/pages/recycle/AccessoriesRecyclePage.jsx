@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { facility } from "../../data/facility";// adjust path if needed
+import { facility } from "../../data/facility";
 
 const ACCESSORY_CATEGORIES = [
   {
@@ -92,6 +92,10 @@ const AccessoriesRecyclePage = () => {
   const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastBookingSummary, setLastBookingSummary] = useState(null);
+
+
   const currentDate = new Date().toISOString().split("T")[0];
 
   const handleCategoryChange = (e) => {
@@ -140,19 +144,34 @@ const AccessoriesRecyclePage = () => {
     try {
       setIsLoading(true);
 
-      const response = await fetch(
-        "https://elocate-server.onrender.com/api/v1/booking", // TODO: change if needed
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newBooking),
-        }
-      );
+      const response = await fetch("http://localhost:8000/api/v1/booking", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newBooking),
+      });
+
 
       if (response.ok) {
-        toast.success("Submitted successfully!", { autoClose: 3000 });
-        setSelectedCategory("");
-        setSelectedItem("");
+        // ✨ Build a small summary for the modal
+        const summary = {
+          recycleItem,
+          pickupDate,
+          pickupTime,
+          facility: selectedFacility,
+          address,
+          userEmail: email,
+        };
+
+        setLastBookingSummary(summary);
+        setShowSuccessModal(true);
+
+        // ✅ nicer toast
+        toast.success("Booking confirmed! A confirmation email has been sent.", {
+          autoClose: 3000,
+        });
+
         setSelectedFacility("");
         setRecycleItemPrice("");
         setPickupDate("");
@@ -161,10 +180,12 @@ const AccessoriesRecyclePage = () => {
         setFullName("");
         setEmail("");
         setPhone("");
-        setItems([]);
+        setIsLoading(false);
+
       } else {
         toast.error("Error submitting data.", { autoClose: 3000 });
       }
+
     } catch (err) {
       console.error(err);
       toast.error("Error submitting data.", { autoClose: 3000 });
@@ -393,6 +414,61 @@ const AccessoriesRecyclePage = () => {
           </button>
         </div>
       </form>
+
+      {showSuccessModal && lastBookingSummary && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-fade-in-up">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                <span className="text-3xl">✅</span>
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+              Booking Confirmed!
+            </h2>
+            <p className="text-center text-gray-600 mb-4">
+              We’ve sent a confirmation email to{" "}
+              <span className="font-semibold">{lastBookingSummary.userEmail}</span>.
+            </p>
+
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm space-y-2">
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Item</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.recycleItem}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Slot</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.pickupDate} at {lastBookingSummary.pickupTime}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Facility</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.facility}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">Pickup Address</span>
+                <p className="text-gray-800 text-right">
+                  {lastBookingSummary.address}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition-colors duration-200"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

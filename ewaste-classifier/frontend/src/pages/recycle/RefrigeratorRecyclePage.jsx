@@ -102,6 +102,9 @@ function Refrigerator() {
   const [models, setModels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [lastBookingSummary, setLastBookingSummary] = useState(null);
+
   const handleBrandChange = (event) => {
     const brand = event.target.value;
     setSelectedBrand(brand);
@@ -115,89 +118,93 @@ function Refrigerator() {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
     const recycleItem = `${selectedBrand} ${selectedModel}`.trim();
 
     if (
-      recycleItem &&
-      selectedFacility &&
-      recycleItemPrice &&
-      pickupDate &&
-      pickupTime &&
-      fullName &&
-      email &&
-      phone &&
-      address
+      !(
+        recycleItem &&
+        selectedFacility &&
+        recycleItemPrice &&
+        pickupDate &&
+        pickupTime &&
+        fullName &&
+        email &&
+        phone &&
+        address
+      )
     ) {
-      const newBooking = {
-        userId: "guest", // manual entry, no auth
-        userEmail: email,
-        recycleItem,
-        recycleItemPrice: Number(recycleItemPrice),
-        pickupDate,
-        pickupTime,
-        facility: selectedFacility,
-        fullName,
-        address,
-        phone,
-      };
-
-      setIsLoading(true);
-
-      try {
-        const response = await fetch(
-          "https://elocate-server.onrender.com/api/v1/booking",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(newBooking),
-          }
-        );
-
-        if (response.ok) {
-          toast.success("Submitted successfully!", {
-            autoClose: 3000,
-          });
-          setSelectedBrand("");
-          setSelectedModel("");
-          setSelectedFacility("");
-          setRecycleItemPrice("");
-          setPickupDate("");
-          setPickupTime("");
-          setAddress("");
-          setFullName("");
-          setEmail("");
-          setPhone("");
-        } else {
-          toast.error("Error submitting data.", {
-            autoClose: 3000,
-          });
-        }
-      } catch (error) {
-        console.error("Error:", error);
-        toast.error("Error submitting data.", {
-          autoClose: 3000,
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
       toast.error("Please fill in all the required fields.", {
         autoClose: 3000,
       });
+      return;
+    }
+
+    const newBooking = {
+      userId: "guest", // manual entry, no auth
+      userEmail: email,
+      recycleItem,
+      recycleItemPrice: Number(recycleItemPrice),
+      pickupDate,
+      pickupTime,
+      facility: selectedFacility,
+      fullName,
+      address,
+      phone,
+    };
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("http://localhost:8000/api/v1/booking", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newBooking),
+      });
+
+      if (response.ok) {
+        const summary = {
+          recycleItem,
+          pickupDate,
+          pickupTime,
+          facility: selectedFacility,
+          address,
+          userEmail: email,
+        };
+
+        setLastBookingSummary(summary);
+        setShowSuccessModal(true);
+
+        toast.success(
+          "Booking confirmed! A confirmation email has been sent.",
+          { autoClose: 3000 }
+        );
+
+        // reset form
+        setSelectedBrand("");
+        setSelectedModel("");
+        setSelectedFacility("");
+        setRecycleItemPrice("");
+        setPickupDate("");
+        setPickupTime("");
+        setAddress("");
+        setFullName("");
+        setEmail("");
+        setPhone("");
+      } else {
+        toast.error("Error submitting data.", { autoClose: 3000 });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error submitting data.", { autoClose: 3000 });
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  if (isLoading) {
-    return (
-      <div className="loader-container">
-        <div className="loader" />
-        <div className="loading-text">Submitting...</div>
-      </div>
-    );
-  }
 
   const currentDate = new Date().toISOString().split("T")[0];
 
@@ -205,15 +212,25 @@ function Refrigerator() {
     <div className="container mx-auto p-8">
       <ToastContainer />
 
+      {/* optional loader overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
+          <div className="loader-container">
+            <div className="loader" />
+            <div className="loading-text text-white text-lg mt-2">
+              Submitting...
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-4xl font-bold mb-6 p-6 text-center">
         Refrigerator Recycling
       </h1>
+
       <form
         className="grid grid-cols-1 md:grid-cols-2 mx-8 md:mx-0 gap-4 justify-center"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSubmit();
-        }}
+        onSubmit={handleSubmit}
       >
         {/* Full Name */}
         <div className="mb-4">
@@ -418,6 +435,67 @@ function Refrigerator() {
           </button>
         </div>
       </form>
+
+      {/* Success Modal */}
+      {showSuccessModal && lastBookingSummary && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-fade-in-up">
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                <span className="text-3xl">✅</span>
+              </div>
+            </div>
+
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+              Booking Confirmed!
+            </h2>
+            <p className="text-center text-gray-600 mb-4">
+              We’ve sent a confirmation email to{" "}
+              <span className="font-semibold">
+                {lastBookingSummary.userEmail}
+              </span>
+              .
+            </p>
+
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm space-y-2">
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Item</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.recycleItem}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Slot</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.pickupDate} at{" "}
+                  {lastBookingSummary.pickupTime}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-medium text-gray-700">Facility</span>
+                <span className="text-gray-800">
+                  {lastBookingSummary.facility}
+                </span>
+              </div>
+              <div>
+                <span className="font-medium text-gray-700">
+                  Pickup Address
+                </span>
+                <p className="text-gray-800 text-right">
+                  {lastBookingSummary.address}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition-colors duration-200"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
