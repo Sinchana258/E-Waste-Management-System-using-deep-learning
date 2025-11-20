@@ -1,5 +1,10 @@
+// src/pages/FacilityLocatorPage.jsx
 import React, { useEffect, useRef, useState } from "react";
 import mapboxgl, { Popup } from "mapbox-gl";
+import MapboxGeocoder from "@mapbox/mapbox-gl-geocoder";
+import "mapbox-gl/dist/mapbox-gl.css";
+import "@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css";
+
 import {
     FaCheckCircle,
     FaTimesCircle,
@@ -9,17 +14,19 @@ import {
     FaPhoneAlt,
     FaClock,
 } from "react-icons/fa";
-import "mapbox-gl/dist/mapbox-gl.css";
-import MapboxGeocoder from "@mapbox/mapbox-gl-geocoder";
-import "@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css";
 
 import getLocation from "../utils/getLocation";
 import { calculateDistance } from "../utils/calculateLocation";
-import { facility } from "../data/facility";
+import { facility as FACILITY_DATA } from "../data/facility";
+
+// Read token from env (create .env: REACT_APP_MAPBOX_TOKEN=...)
+mapboxgl.accessToken =
+    process.env.REACT_APP_MAPBOX_TOKEN ||
+    "pk.eyJ1Ijoic2h1ZW5jZSIsImEiOiJjbG9wcmt3czMwYnZsMmtvNnpmNTRqdnl6In0.vLBhYMBZBl2kaOh1Fh44Bw";
 
 const FacilityLocatorPage = () => {
     const [facilityData, setFacilityData] = useState([]);
-    const [clientLocation, setClientLocation] = useState(null); // [lon, lat]
+    const [clientLocation, setClientLocation] = useState(null); // [lng, lat]
     const [selectedFacilityIndex, setSelectedFacilityIndex] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [filterVerified, setFilterVerified] = useState(false);
@@ -27,95 +34,85 @@ const FacilityLocatorPage = () => {
 
     const cardContainerRef = useRef(null);
     const mapContainerRef = useRef(null);
-    const markersRef = useRef([]);
     const mapRef = useRef(null);
     const userMarkerRef = useRef(null);
+    const markersRef = useRef([]);
+    const geocoderRef = useRef(null);
 
-    // 🔑 1. Setup Mapbox token & get user location
     useEffect(() => {
-        mapboxgl.accessToken =
-            "pk.eyJ1Ijoic2h1ZW5jZSIsImEiOiJjbG9wcmt3czMwYnZsMmtvNnpmNTRqdnl6In0.vLBhYMBZBl2kaOh1Fh44Bw";
-
         document.title = "E-Locate | E-Waste Facility Locator";
 
         setIsLoading(true);
-        getLocation().then((coordinates) => {
-            if (coordinates) {
-                setClientLocation(coordinates.coordinates);
-            } else {
-                // Fallback: somewhere in Maharashtra (your default)
+        getLocation()
+            .then((coords) => {
+                if (coords && coords.coordinates) {
+                    setClientLocation(coords.coordinates);
+                } else {
+                    setClientLocation([75.7139, 19.7515]);
+                }
+            })
+            .catch(() => {
                 setClientLocation([75.7139, 19.7515]);
-            }
-            setIsLoading(false);
-        });
+            })
+            .finally(() => setIsLoading(false));
     }, []);
 
-    const handleAllowLocationClick = () => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                () => {
-                    // Just refresh to re-trigger getLocation()
-                    window.location.reload();
-                },
-                (error) => {
-                    switch (error.code) {
-                        case error.PERMISSION_DENIED:
-                            console.error("User denied the request for location.");
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            console.error("Location information is unavailable.");
-                            break;
-                        case error.TIMEOUT:
-                            console.error("The request to get user location timed out.");
-                            break;
-                        default:
-                            console.error("An unknown error occurred.");
-                            break;
-                    }
-                }
-            );
-        } else {
-            console.error("Geolocation is not supported by this browser.");
-        }
-    };
-
-    // Helper: filter facilities based on current filters
-    const filteredFacilities = () => {
+    const filteredFacilities = React.useMemo(() => {
         if (!facilityData.length) return [];
-
-        let filtered = [...facilityData];
-
-        if (filterVerified) {
-            filtered = filtered.filter((f) => f.verified);
-        }
-
-        if (filterDistance !== null) {
+        let filtered = facilityData;
+        if (filterVerified) filtered = filtered.filter((f) => f.verified);
+        if (filterDistance !== null && !Number.isNaN(filterDistance)) {
             filtered = filtered.filter((f) => f.distance <= filterDistance);
         }
-
         return filtered;
-    };
+    }, [facilityData, filterVerified, filterDistance]);
 
-    // 🔑 2. Initialize map & markers once we have clientLocation
+    const formatDistance = (dKm) => `${dKm.toFixed(2)} km`;
+
     useEffect(() => {
         if (!clientLocation) return;
 
-        // 1. Sort facilities by distance from current location
-        const sortedFacilities = facility
-            .map((f) => ({
-                ...f,
-                distance: calculateDistance(
-                    clientLocation[1],
-                    clientLocation[0],
-                    f.lat,
-                    f.lon
-                ),
-            }))
-            .sort((a, b) => a.distance - b.distance);
+        const withDistances = FACILITY_DATA.map((f) => ({
+            ...f,
+            distance: calculateDistance(clientLocation[1], clientLocation[0], f.lat, f.lon),
+        })).sort((a, b) => a.distance - b.distance);
 
-        setFacilityData(sortedFacilities);
+        setFacilityData(withDistances);
 
-        // 2. Create map
+        if (mapRef.current) {
+            mapRef.current.setCenter(clientLocation);
+            mapRef.current.setZoom(10);
+
+            if (userMarkerRef.current) {
+                userMarkerRef.current.setLngLat(clientLocation);
+            } else {
+                userMarkerRef.current = new mapboxgl.Marker({ color: "#3366ff", scale: 1.2 })
+                    .setLngLat(clientLocation)
+                    .addTo(mapRef.current);
+            }
+
+            markersRef.current.forEach((m) => m.remove());
+            markersRef.current = [];
+
+            withDistances.forEach((f, idx) => {
+                const popup = new Popup({ offset: 12 }).setHTML(createFacilityPopupHTML(f));
+                const marker = new mapboxgl.Marker({
+                    color: f.verified ? "#10b981" : "#f97316",
+                    scale: 1,
+                })
+                    .setLngLat([f.lon, f.lat])
+                    .setPopup(popup)
+                    .addTo(mapRef.current);
+
+                markersRef.current.push(marker);
+                marker.getElement().addEventListener("click", () => {
+                    setSelectedFacilityIndex(idx);
+                });
+            });
+
+            return;
+        }
+
         const map = new mapboxgl.Map({
             container: mapContainerRef.current,
             style: "mapbox://styles/mapbox/streets-v11",
@@ -125,113 +122,63 @@ const FacilityLocatorPage = () => {
 
         mapRef.current = map;
 
-        // 3. Add geocoder search
+        map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
+
         const geocoder = new MapboxGeocoder({
             accessToken: mapboxgl.accessToken,
             mapboxgl: mapboxgl,
             placeholder: "Search for your location",
+            marker: false,
         });
-
+        geocoderRef.current = geocoder;
         map.addControl(geocoder);
 
-        geocoder.on("result", (event) => {
-            const { geometry, place_name } = event.result;
+        const onGeocoderResult = (event) => {
+            const { geometry, place_name } = event.result || {};
+            if (!geometry || !geometry.coordinates) return;
+            const center = geometry.coordinates;
 
-            if (geometry && geometry.coordinates) {
-                const center = geometry.coordinates;
+            setClientLocation([center[0], center[1]]);
 
-                // Remove previous user marker if any
-                if (userMarkerRef.current) {
-                    userMarkerRef.current.remove();
-                }
-
-                const selectedLocationMarker = new mapboxgl.Marker({
-                    color: "#3366ff",
-                    scale: 1.2,
-                })
+            if (userMarkerRef.current) {
+                userMarkerRef.current.setLngLat(center);
+            } else {
+                userMarkerRef.current = new mapboxgl.Marker({ color: "#3366ff", scale: 1.2 })
                     .setLngLat(center)
                     .addTo(map);
+            }
 
-                userMarkerRef.current = selectedLocationMarker;
+            const selectedLocationPopup = new Popup().setHTML(
+                `<div class="p-2"><h3 style="margin:0;font-weight:600;color:#2563eb">Selected Location</h3><div style="font-size:13px;color:#374151">${place_name || ""}</div></div>`
+            );
+            userMarkerRef.current.setPopup(selectedLocationPopup).togglePopup();
 
-                const popup = new Popup().setHTML(
-                    `<div class="p-2">
-            <h3 class="font-bold text-indigo-600 text-lg mb-1">Selected Location</h3>
-            <p class="text-sm text-gray-700">Address: ${place_name || "Address not available"
-                    }</p>
-          </div>`
-                );
+            const recalculated = FACILITY_DATA.map((f) => ({
+                ...f,
+                distance: calculateDistance(center[1], center[0], f.lat, f.lon),
+            })).sort((a, b) => a.distance - b.distance);
 
-                selectedLocationMarker.setPopup(popup);
+            setFacilityData(recalculated);
 
-                // Recalculate distances based on searched location
-                const recalculated = facility
-                    .map((f) => ({
-                        ...f,
-                        distance: calculateDistance(center[1], center[0], f.lat, f.lon),
-                    }))
-                    .sort((a, b) => a.distance - b.distance);
-
-                setFacilityData(recalculated);
-                setClientLocation([center[0], center[1]]);
-
-                // Automatically route to nearest facility
+            if (recalculated.length) {
                 const nearest = recalculated[0];
                 getDirections(center, [nearest.lon, nearest.lat]);
                 setSelectedFacilityIndex(0);
             }
-        });
+        };
 
-        // 4. Navigation controls
-        map.addControl(new mapboxgl.NavigationControl(), "bottom-right");
+        geocoder.on("result", onGeocoderResult);
 
-        // 5. User marker
-        const userMarker = new mapboxgl.Marker({
-            color: "#3366ff",
-            scale: 1.2,
-        })
+        userMarkerRef.current = new mapboxgl.Marker({ color: "#3366ff", scale: 1.2 })
             .setLngLat(clientLocation)
             .addTo(map);
 
-        const userPopup = new Popup().setHTML(
-            `<div class="p-2">
-        <h3 class="font-bold text-indigo-600 text-lg mb-1">Your Location</h3>
-      </div>`
+        userMarkerRef.current.setPopup(
+            new Popup().setHTML(`<div style="font-weight:600;color:#2563eb">Your Location</div>`)
         );
 
-        userMarker.setPopup(userPopup);
-        userMarkerRef.current = userMarker;
-
-        // 6. Facility markers
-        markersRef.current.forEach((m) => m.remove());
-        markersRef.current = [];
-
-        sortedFacilities.forEach((f, index) => {
-            const popup = new Popup().setHTML(
-                `<div class="p-3">
-          <h3 class="font-bold text-emerald-600 text-xl mb-2">${f.name}</h3>
-          <div class="flex items-center text-sm mb-1">
-            <span class="font-semibold mr-2">Capacity:</span>
-            <span>${f.capacity} tons/month</span>
-          </div>
-          <div class="flex items-start text-sm mb-1">
-            <span class="font-semibold mr-2">Address:</span>
-            <span>${f.address}</span>
-          </div>
-          <div class="flex items-center text-sm mb-1">
-            <span class="font-semibold mr-2">Contact:</span>
-            <span>${f.contact}</span>
-          </div>
-          <div class="flex items-center text-sm mb-1">
-            <span class="font-semibold mr-2">Hours:</span>
-            <span>${f.time}</span>
-          </div>
-          <div class="flex items-center text-sm font-medium text-indigo-600">
-            <span>${f.distance.toFixed(2)} km from your location</span>
-          </div>
-        </div>`
-            );
-
+        withDistances.forEach((f, idx) => {
+            const popup = new Popup({ offset: 12 }).setHTML(createFacilityPopupHTML(f));
             const marker = new mapboxgl.Marker({
                 color: f.verified ? "#10b981" : "#f97316",
                 scale: 1,
@@ -241,187 +188,190 @@ const FacilityLocatorPage = () => {
                 .addTo(map);
 
             markersRef.current.push(marker);
-
             marker.getElement().addEventListener("click", () => {
-                const popup = marker.getPopup();
-                if (popup) {
-                    if (popup.isOpen()) {
-                        popup.remove();
-                    } else {
-                        popup.addTo(mapRef.current);
-                    }
-                }
-                setSelectedFacilityIndex(index);
-            });
-
-            popup.on("close", () => {
-                setSelectedFacilityIndex(null);
+                setSelectedFacilityIndex(idx);
             });
         });
 
         return () => {
-            map.remove();
+            try {
+                geocoder.off && geocoder.off("result", onGeocoderResult);
+                map.remove();
+            } catch (err) {
+            } finally {
+                mapRef.current = null;
+                geocoderRef.current = null;
+                markersRef.current = [];
+            }
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [clientLocation]);
 
-    // 🔑 3. Visually highlight selected marker
     useEffect(() => {
         if (!markersRef.current || !mapRef.current) return;
 
         markersRef.current.forEach((marker, index) => {
             const el = marker.getElement();
             if (!el) return;
-
-            el.className = `mapboxgl-marker mapboxgl-marker-anchor-center ${selectedFacilityIndex === index ? "pulse-marker" : ""
-                }`;
-
-            if (selectedFacilityIndex === index) {
-                el.style.transform = `translate(-50%, -50%) scale(1.2)`;
+            if (index === selectedFacilityIndex) {
+                el.style.transform = "translate(-50%, -50%) scale(1.25)";
+                el.style.zIndex = 1000;
+                setTimeout(() => marker.getPopup()?.addTo(mapRef.current), 0);
             } else {
-                el.style.transform = `translate(-50%, -50%) scale(1.0)`;
+                el.style.transform = "translate(-50%, -50%) scale(1.0)";
+                el.style.zIndex = "";
+                marker.getPopup()?.remove();
             }
         });
-    }, [selectedFacilityIndex]);
 
-    // 🔑 4. Directions using Mapbox Directions API
+        if (
+            selectedFacilityIndex !== null &&
+            cardContainerRef.current &&
+            facilityData.length > 0
+        ) {
+            const cards = cardContainerRef.current.querySelectorAll(".facility-card");
+            const el = cards[selectedFacilityIndex];
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+        }
+    }, [selectedFacilityIndex, facilityData]);
+
     const getDirections = async (origin, destination) => {
+        if (!mapRef.current || !origin || !destination) return;
+
         try {
             const res = await fetch(
-                `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?alternatives=true&continue_straight=true&geometries=geojson&language=en&overview=full&steps=true&access_token=${mapboxgl.accessToken}`
+                `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?alternatives=false&geometries=geojson&overview=full&steps=false&access_token=${mapboxgl.accessToken}`
             );
-
             const data = await res.json();
+            if (!data || data.code !== "Ok" || !data.routes || !data.routes[0]) return;
 
-            if (data.code === "Ok" && mapRef.current) {
-                const distanceInKm = data.routes[0].distance / 1000;
-                const durationInMinutes = Math.ceil(data.routes[0].duration / 60);
+            const route = data.routes[0];
+            const id = "directions-route";
 
-                const directionsLayerId = "directions";
-
-                if (mapRef.current.getLayer(directionsLayerId)) {
-                    mapRef.current.removeLayer(directionsLayerId);
-                    mapRef.current.removeSource(directionsLayerId);
-                }
-
-                mapRef.current.addSource(directionsLayerId, {
-                    type: "geojson",
-                    data: {
-                        type: "Feature",
-                        properties: {},
-                        geometry: data.routes[0].geometry,
-                    },
-                });
-
-                mapRef.current.addLayer({
-                    id: directionsLayerId,
-                    type: "line",
-                    source: directionsLayerId,
-                    layout: {
-                        "line-join": "round",
-                        "line-cap": "round",
-                    },
-                    paint: {
-                        "line-color": "#4f46e5",
-                        "line-width": 5,
-                        "line-opacity": 0.75,
-                    },
-                });
-
-                const bounds = new mapboxgl.LngLatBounds();
-                data.routes[0].geometry.coordinates.forEach((coord) =>
-                    bounds.extend(coord)
-                );
-                mapRef.current.fitBounds(bounds, { padding: 60 });
-
-                const midPoint =
-                    data.routes[0].geometry.coordinates[
-                    Math.floor(data.routes[0].geometry.coordinates.length / 2)
-                    ];
-
-                new mapboxgl.Popup({
-                    closeButton: true,
-                    closeOnClick: false,
-                    offset: 25,
-                    className: "directions-popup",
-                })
-                    .setLngLat(midPoint)
-                    .setHTML(
-                        `<div class="p-3">
-              <h3 class="font-bold text-indigo-600 text-lg mb-1">Route Information</h3>
-              <p class="text-md mb-1">Distance: <span class="font-semibold">${distanceInKm.toFixed(
-                            2
-                        )} km</span></p>
-              <p class="text-md">Estimated time: <span class="font-semibold">${durationInMinutes} minutes</span></p>
-            </div>`
-                    )
-                    .addTo(mapRef.current);
+            if (mapRef.current.getLayer(id)) {
+                try {
+                    mapRef.current.removeLayer(id);
+                } catch (err) { }
             }
-        } catch (error) {
-            console.error("Error fetching directions:", error);
+            if (mapRef.current.getSource(id)) {
+                try {
+                    mapRef.current.removeSource(id);
+                } catch (err) { }
+            }
+
+            mapRef.current.addSource(id, {
+                type: "geojson",
+                data: {
+                    type: "Feature",
+                    properties: {},
+                    geometry: route.geometry,
+                },
+            });
+
+            mapRef.current.addLayer({
+                id,
+                type: "line",
+                source: id,
+                layout: { "line-join": "round", "line-cap": "round" },
+                paint: { "line-color": "#4f46e5", "line-width": 5, "line-opacity": 0.85 },
+            });
+
+            const bounds = new mapboxgl.LngLatBounds();
+            route.geometry.coordinates.forEach((c) => bounds.extend(c));
+            mapRef.current.fitBounds(bounds, { padding: 60 });
+
+            const midIdx = Math.floor(route.geometry.coordinates.length / 2);
+            const midpoint = route.geometry.coordinates[midIdx];
+
+            const distanceKm = route.distance / 1000;
+            const minutes = Math.ceil(route.duration / 60);
+
+            new Popup({ offset: 25 })
+                .setLngLat(midpoint)
+                .setHTML(
+                    `<div style="font-weight:600;color:#4338ca;margin-bottom:6px">Route</div>
+           <div style="font-size:13px;color:#374151">Distance: <strong>${distanceKm.toFixed(
+                        2
+                    )} km</strong><br/>ETA: <strong>${minutes} min</strong></div>`
+                )
+                .addTo(mapRef.current);
+        } catch (err) {
+            console.error("Directions failed:", err);
         }
     };
 
-    // 🔑 5. Scroll selected card into view + get directions
-    useEffect(() => {
-        if (
-            selectedFacilityIndex === null ||
-            !cardContainerRef.current ||
-            !mapRef.current ||
-            facilityData.length === 0
-        ) {
+    function createFacilityPopupHTML(f) {
+        return `<div style="font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; max-width:260px">
+      <h3 style="margin:0 0 0px 0;color:#059669;font-weight:700">${f.name}</h3>
+      <div style="font-size:13px;color:#374151;margin-bottom:6px">${f.address}</div>
+      <div style="font-size:13px;color:#374151;margin-bottom:6px"><strong>Contact:</strong> ${f.contact}</div>
+      <div style="font-size:13px;color:#374151;margin-bottom:6px"><strong>Hours:</strong> ${f.time}</div>
+      <div style="font-size:13px;color:#374151"><strong>Distance:</strong> ${formatDistance(
+            f.distance
+        )}</div>
+    </div>`;
+    }
+
+    const handleAllowLocationClick = () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation not supported in this browser.");
             return;
         }
-
-        const cardHeight = 220; // approx height
-        const scrollPosition = selectedFacilityIndex * cardHeight;
-
-        cardContainerRef.current.scrollTo({
-            top: scrollPosition,
-            behavior: "smooth",
-        });
-
-        if (clientLocation && selectedFacilityIndex < facilityData.length) {
-            const selected = facilityData[selectedFacilityIndex];
-            getDirections(clientLocation, [selected.lon, selected.lat]);
-        }
-    }, [selectedFacilityIndex, facilityData, clientLocation]);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const lng = pos.coords.longitude;
+                const lat = pos.coords.latitude;
+                setClientLocation([lng, lat]);
+                setIsLoading(false);
+                if (mapRef.current) {
+                    mapRef.current.flyTo({ center: [lng, lat], zoom: 12 });
+                }
+            },
+            (err) => {
+                console.warn("Geolocation error:", err);
+                alert("Unable to read your location. Please check browser permissions.");
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    };
 
     return (
-        <div className="min-h-screen bg-gray-50 e-facilities-container">
+        <div className="min-h-screen bg-[#E2F0C9]  e-facilities-container pt-8">
             {isLoading ? (
-                <div className="flex items-center justify-center h-screen">
+                <div className="flex items-center justify-center min-h-[60vh]">
                     <div className="text-center">
-                        <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-xl text-gray-600">
+                        <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                        <p className="text-xl text-gray-700">
                             Locating the nearest e-waste facilities...
                         </p>
                     </div>
                 </div>
             ) : clientLocation ? (
-                <div className="pt-8 pb-16 px-4 md:px-8">
+                <div className=" pb-16 px-4 md:px-8">
                     <div className="mb-8 text-center">
                         <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">
                             E-Waste Recycling Facility Locator
                         </h1>
-                        <p className="text-gray-600 max-w-2xl mx-auto">
-                            Find certified e-waste collection and recycling centers near
-                            you. Get directions, check facility details, and book recycling
-                            services.
+                        <p className="text-gray-700 max-w-2xl mx-auto">
+                            Find certified e-waste collection and recycling centers near you. Get directions,
+                            check facility details, and book recycling services.
                         </p>
                     </div>
 
-                    {/* Legend */}
+                    {/* Legend & Filters */}
                     <div className="mb-6 flex flex-wrap gap-4 justify-center">
                         <div className="bg-white p-3 rounded-lg shadow-sm flex items-center">
-                            <span className="w-4 h-4 rounded-full bg-green-500 mr-2"></span>
+                            <span className="w-4 h-4 rounded-full bg-green-500 mr-2" />
                             <span className="text-gray-700">Verified Facility</span>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm flex items-center">
-                            <span className="w-4 h-4 rounded-full bg-orange-500 mr-2"></span>
+                            <span className="w-4 h-4 rounded-full bg-orange-500 mr-2" />
                             <span className="text-gray-700">Unverified Facility</span>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm flex items-center">
-                            <span className="w-4 h-4 rounded-full bg-blue-500 mr-2"></span>
+                            <span className="w-4 h-4 rounded-full bg-blue-500 mr-2" />
                             <span className="text-gray-700">Your Location</span>
                         </div>
                     </div>
@@ -437,10 +387,11 @@ const FacilityLocatorPage = () => {
                                 <div className="flex gap-4 mb-4 flex-wrap">
                                     <button
                                         className={`px-4 py-2 rounded-md ${filterVerified
-                                                ? "bg-emerald-500 text-white"
-                                                : "bg-gray-100 text-gray-700"
+                                            ? "bg-emerald-500 text-white"
+                                            : "bg-gray-100 text-gray-700"
                                             }`}
-                                        onClick={() => setFilterVerified(!filterVerified)}
+                                        onClick={() => setFilterVerified((s) => !s)}
+                                        aria-pressed={filterVerified}
                                     >
                                         Verified Only
                                     </button>
@@ -450,9 +401,10 @@ const FacilityLocatorPage = () => {
                                         value={filterDistance || ""}
                                         onChange={(e) =>
                                             setFilterDistance(
-                                                e.target.value ? parseInt(e.target.value) : null
+                                                e.target.value ? Number(e.target.value) : null
                                             )
                                         }
+                                        aria-label="Filter by max distance (km)"
                                     >
                                         <option value="">Distance - Any</option>
                                         <option value="5">Within 5 km</option>
@@ -465,35 +417,45 @@ const FacilityLocatorPage = () => {
 
                             <div
                                 ref={cardContainerRef}
-                                className="flex-grow bg-gray-50 rounded-lg overflow-y-auto max-h-[70vh] p-1"
+                                className="flex-grow bg-[#E2F0C9] rounded-lg overflow-y-auto max-h-[70vh] p-3"
                                 style={{ scrollbarWidth: "thin" }}
+                                aria-live="polite"
                             >
-                                {filteredFacilities().length > 0 ? (
-                                    filteredFacilities().map((info, idx) => {
-                                        // Map filtered item back to original index in facilityData
+                                {filteredFacilities.length > 0 ? (
+                                    filteredFacilities.map((info, idx) => {
                                         const globalIndex = facilityData.findIndex(
                                             (f) =>
                                                 f.name === info.name &&
-                                                f.lon === info.lon &&
-                                                f.lat === info.lat
+                                                f.lat === info.lat &&
+                                                f.lon === info.lon
                                         );
-
-                                        const isSelected =
-                                            globalIndex === selectedFacilityIndex;
+                                        const isSelected = globalIndex === selectedFacilityIndex;
 
                                         return (
                                             <div
                                                 key={`${info.name}-${idx}`}
-                                                className={`p-4 bg-white rounded-lg shadow-sm cursor-pointer mb-4 border-l-4 transition-all duration-200 hover:shadow-md
-                          ${isSelected
-                                                        ? "border-l-emerald-500 shadow-md"
-                                                        : info.verified
-                                                            ? "border-l-green-500"
-                                                            : "border-l-orange-500"
+                                                className={`facility-card p-4 bg-white rounded-lg shadow-sm cursor-pointer mb-4 border-l-4 transition-all duration-200 hover:shadow-md ${isSelected
+                                                    ? "border-l-emerald-500 shadow-md"
+                                                    : info.verified
+                                                        ? "border-l-green-500"
+                                                        : "border-l-orange-500"
                                                     }`}
                                                 onClick={() => {
                                                     if (globalIndex !== -1) {
                                                         setSelectedFacilityIndex(globalIndex);
+                                                        mapRef.current &&
+                                                            mapRef.current.flyTo({
+                                                                center: [info.lon, info.lat],
+                                                                zoom: 13,
+                                                            });
+                                                    }
+                                                }}
+                                                role="button"
+                                                tabIndex={0}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                        if (globalIndex !== -1)
+                                                            setSelectedFacilityIndex(globalIndex);
                                                     }
                                                 }}
                                             >
@@ -503,13 +465,11 @@ const FacilityLocatorPage = () => {
                                                     </h2>
                                                     {info.verified ? (
                                                         <div className="flex items-center text-green-500 text-sm font-medium">
-                                                            <FaCheckCircle className="mr-1" />
-                                                            Verified
+                                                            <FaCheckCircle className="mr-1" /> Verified
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center text-orange-500 text-sm font-medium">
-                                                            <FaTimesCircle className="mr-1" />
-                                                            Unverified
+                                                            <FaTimesCircle className="mr-1" /> Unverified
                                                         </div>
                                                     )}
                                                 </div>
@@ -528,7 +488,7 @@ const FacilityLocatorPage = () => {
                                                         <p>{info.time}</p>
                                                     </div>
                                                     <p className="font-medium text-indigo-600">
-                                                        {info.distance.toFixed(2)} km away
+                                                        {formatDistance(info.distance)} away
                                                     </p>
                                                 </div>
 
@@ -545,41 +505,40 @@ const FacilityLocatorPage = () => {
                                                             }
                                                         }}
                                                     >
-                                                        <FaDirections className="mr-2" />
-                                                        Directions
+                                                        <FaDirections className="mr-2" /> Directions
                                                     </button>
 
-                                                    {/* If you later use react-router, replace this with <Link to="/recycle"> */}
                                                     <a
                                                         href="/recycle"
-                                                        className="flex-1 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                                                        className="flex-1 flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                                                        onClick={(e) => e.stopPropagation()}
                                                     >
-                                                        <FaRecycle className="mr-2" />
-                                                        Book Recycling
+                                                        <FaRecycle className="mr-2" /> Book Recycling
                                                     </a>
                                                 </div>
                                             </div>
                                         );
                                     })
                                 ) : (
-                                    <div className="p-8 text-center text-gray-600">
-                                        No facilities match your current filters. Try adjusting
-                                        your search criteria.
+                                    <div className="p-8 text-center text-gray-700">
+                                        No facilities match your current filters. Try toggling
+                                        &quot;Verified Only&quot; or expanding the distance.
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Right: Map */}
+                        {/* Right: Map container */}
                         <div
                             ref={mapContainerRef}
                             id="map"
                             className="lg:w-2/3 h-[75vh] rounded-lg shadow-md"
+                            aria-label="Facility map"
                         />
                     </div>
                 </div>
             ) : (
-                <div className="flex items-center justify-center h-screen bg-gray-50 px-4">
+                <div className="flex items-center justify-center min-h-[60vh] px-4">
                     <div className="max-w-md mx-auto text-center">
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -606,10 +565,9 @@ const FacilityLocatorPage = () => {
                             Location Access Required
                         </h2>
 
-                        <p className="text-gray-600 mb-8">
-                            We need access to your location to show you nearby e-waste
-                            recycling facilities. Please enable location services in your
-                            browser settings.
+                        <p className="text-gray-700 mb-8">
+                            We need access to your location to show you nearby e-waste recycling
+                            facilities. Please enable location services in your browser settings.
                         </p>
 
                         <button

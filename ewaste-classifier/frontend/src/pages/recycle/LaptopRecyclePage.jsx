@@ -405,7 +405,8 @@ const LaptopRecyclePage = () => {
         <div className="mb-4 md:col-span-2">
           <button
             type="submit"
-            className="bg-emerald-700 text-xl text-white px-6 py-3 rounded-md w-full"
+            className="bg-[#5a8807] text-xl text-white px-6 py-3 rounded-md w-full"
+
           >
             Submit
           </button>

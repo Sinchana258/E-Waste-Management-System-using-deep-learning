@@ -1,298 +1,354 @@
-import React, { useEffect, useRef, useState } from "react";
+// src/components/ResultCard.jsx
+import React, { useMemo } from "react";
+import { ClipboardIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import placeholderImg from "../assets/Elogo.png";
 
-/**
- * ResultCard
- * Props:
- *  - imageUrl: object URL of uploaded image
- *  - predictions: [{ class_id, class_name, confidence, bbox: [x1,y1,x2,y2] }]
- *  - speed: optional string from backend (speed info)
- */
-
-const DEFAULT_COLORS = {
-    Recyclable: "rgba(34,197,94,0.95)",
-    Hazardous: "rgba(239,68,68,0.95)",
-    Reusable: "rgba(59,130,246,0.95)",
-    default: "rgba(168,85,247,0.95)",
+const CATEGORY_DEFS = {
+    hazardous: {
+        title: "Hazardous",
+        color: "bg-red-600",
+        textColorClass: "text-red-600",
+        // keywords (many variants). Hazardous gets higher weight
+        keywords: [
+            "battery",
+            "li-ion",
+            "li ion",
+            "lithium",
+            "lead acid",
+            "capacitor",
+            "pcb",
+            "printed circuit",
+            "transformer",
+            "mercury",
+            "cfl",
+            "fluorescent",
+            "acid",
+            "chemical",
+            "brominated",
+            "hazardous",
+            "explosive",
+            "tox",
+            "toxicity",
+            "pcbboard",
+            "power supply",
+            "solder"
+        ],
+        weight: 2.4,
+        suggestion:
+            "This item may contain hazardous materials (batteries, mercury, capacitors, PCBs). Do NOT throw it in regular trash. Use a certified e-waste facility for safe disposal.",
+        ctas: [
+            { label: "Find Safe Facility", href: "/facility-locator", style: "bg-red-600 text-white" },
+            { label: "Safety Tips", href: "/safety", style: "border border-red-200 text-red-700 bg-white" }
+        ],
+    },
+    reusable: {
+        title: "Reusable",
+        color: "bg-blue-600",
+        textColorClass: "text-blue-600",
+        keywords: [
+            "phone",
+            "smartphone",
+            "laptop",
+            "tablet",
+            "monitor",
+            "tv",
+            "television",
+            "camera",
+            "printer",
+            "speaker",
+            "console",
+            "router",
+            "keyboard",
+            "mouse",
+            "hard drive",
+            "ssd",
+            "macbook",
+            "iphone",
+            "galaxy",
+            "imac",
+            "workstation"
+        ],
+        weight: 1.6,
+        suggestion:
+            "This device looks reusable or resellable. Consider donating, listing it in the marketplace, or selling to extend the device's life.",
+        ctas: [
+            { label: "Post to Marketplace", href: "/ewaste-marketplace", style: "bg-blue-600 text-white" },
+            { label: "Estimate Value", href: "/cost-estimator", style: "border border-blue-200 text-blue-700 bg-white" }
+        ],
+    },
+    recyclable: {
+        title: "Recyclable",
+        color: "bg-emerald-600",
+        textColorClass: "text-emerald-600",
+        keywords: [
+            "cable",
+            "charger",
+            "adapter",
+            "keyboard",
+            "headphone",
+            "earbuds",
+            "plastic",
+            "metal",
+            "pcb scrap",
+            "motherboard",
+            "case",
+            "frame",
+            "fan",
+            "heat sink",
+            "accessory",
+            "power cord",
+            "speaker cone"
+        ],
+        weight: 1.0,
+        suggestion:
+            "This item can be recycled. Drop it at a certified e-waste recycling center so materials are recovered responsibly.",
+        ctas: [
+            { label: "Find Facility", href: "/facility-locator", style: "bg-emerald-600 text-white" },
+            { label: "Estimate Value", href: "/cost-estimator", style: "border border-emerald-200 text-emerald-700 bg-white" }
+        ],
+    },
 };
 
-function pickColor(className) {
-    if (!className) return DEFAULT_COLORS.default;
-    const key = Object.keys(DEFAULT_COLORS).find(
-        (k) => k.toLowerCase() === className.toLowerCase()
-    );
-    return DEFAULT_COLORS[key] || DEFAULT_COLORS.default;
-}
+// helper: normalize string for matching
+const norm = (s = "") => s.toLowerCase().replace(/[^a-z0-9\s\-]/g, " ").trim();
 
-export default function ResultCard({ imageUrl, predictions = [], speed = "", onClear }) {
-    const imgRef = useRef(null);
-    const canvasRef = useRef(null);
-    const wrapperRef = useRef(null);
+const decideCategory = (predictions = [], backendCategory = null) => {
+    // If backend explicitly returned a category, prefer it (trust backend)
+    if (backendCategory && ["hazardous", "reusable", "recyclable"].includes(backendCategory)) {
+        return backendCategory;
+    }
 
-    const [showJson, setShowJson] = useState(false);
+    // use top N predictions
+    const topN = predictions.slice(0, 6);
+    if (!topN.length) return "recyclable";
 
-    // NEW: Zoom state
-    const [zoom, setZoom] = useState(1);
+    // initialize scores
+    const scores = { hazardous: 0, reusable: 0, recyclable: 0 };
 
-    const zoomIn = () => setZoom((z) => Math.min(2, z + 0.25));
-    const zoomOut = () => setZoom((z) => Math.max(0.5, z - 0.25));
-    const resetZoom = () => setZoom(1);
+    // loop predictions and increment scores by confidence * weight when keyword matches
+    topN.forEach((p) => {
+        const label = norm(p.label || "");
+        const conf = Number(p.confidence || 0);
+        if (!label) return;
 
-    // Draw boxes when image loads or predictions change
-    useEffect(() => {
-        const img = imgRef.current;
-        const canvas = canvasRef.current;
-        if (!img || !canvas) return;
-
-        function fitCanvas() {
-            if (!wrapperRef.current) return;
-
-            // match canvas to wrapper (scaled area)
-            const rect = wrapperRef.current.getBoundingClientRect();
-            canvas.width = Math.round(rect.width);
-            canvas.height = Math.round(rect.height);
-            draw();
-        }
-
-        function draw() {
-            const ctx = canvas.getContext("2d");
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (!predictions || predictions.length === 0) return;
-
-            const naturalW = img.naturalWidth || img.width;
-            const naturalH = img.naturalHeight || img.height;
-
-            // scaled (zoomed) wrapper dims
-            const dispW = canvas.width;
-            const dispH = canvas.height;
-
-            const scaleX = dispW / naturalW;
-            const scaleY = dispH / naturalH;
-
-            const maxVal = predictions.reduce((acc, p) => Math.max(acc, ...p.bbox), 0);
-            const normalized = maxVal <= 1.0;
-
-            predictions.forEach((p) => {
-                let [x1, y1, x2, y2] = p.bbox.map(Number);
-
-                if (normalized) {
-                    x1 *= naturalW;
-                    x2 *= naturalW;
-                    y1 *= naturalH;
-                    y2 *= naturalH;
+        Object.entries(CATEGORY_DEFS).forEach(([key, def]) => {
+            def.keywords.forEach((kw) => {
+                // word boundary match or substring match if kw has spaces (e.g. "printed circuit")
+                const k = kw.toLowerCase();
+                if (k.includes(" ")) {
+                    if (label.includes(k)) {
+                        scores[key] += conf * def.weight;
+                    }
+                } else {
+                    // match whole word or substring (covers variants)
+                    if (label.split(/\s+/).some((tok) => tok.includes(k) || k.includes(tok)) || label.includes(k)) {
+                        scores[key] += conf * def.weight;
+                    }
                 }
-
-                const dx1 = x1 * scaleX;
-                const dy1 = y1 * scaleY;
-                const dx2 = x2 * scaleX;
-                const dy2 = y2 * scaleY;
-
-                const w = Math.max(1, dx2 - dx1);
-                const h = Math.max(1, dy2 - dy1);
-
-                const color = pickColor(p.class_name);
-                ctx.lineWidth = Math.max(2, Math.round((dispW / 640) * 3));
-                ctx.strokeStyle = color;
-
-                ctx.globalAlpha = 0.08;
-                ctx.fillStyle = color;
-                ctx.fillRect(dx1, dy1, w, h);
-                ctx.globalAlpha = 1.0;
-
-                ctx.strokeRect(dx1, dy1, w, h);
-
-                const label = `${p.class_name} ${(p.confidence * 100).toFixed(1)}%`;
-                ctx.font = `${Math.max(12, Math.round(dispW / 64))}px sans-serif`;
-                const textWidth = ctx.measureText(label).width;
-                const padding = 6;
-                const labelHeight = parseInt(ctx.font, 10) + 6;
-
-                ctx.globalAlpha = 0.9;
-                ctx.fillStyle = color;
-                ctx.fillRect(dx1, Math.max(0, dy1 - labelHeight), textWidth + padding * 2, labelHeight);
-                ctx.globalAlpha = 1.0;
-
-                ctx.fillStyle = "#fff";
-                ctx.fillText(label, dx1 + padding, Math.max(12, dy1 - 6));
             });
+        });
+    });
+
+    // If all scores are zero (no keywords matched), try heuristics:
+    const allZero = Object.values(scores).every((v) => v === 0);
+    if (allZero) {
+        // some heuristics based on single-label hints
+        const label = norm(topN[0].label || "");
+        if (label.includes("battery") || label.includes("pcb") || label.includes("capacitor") || label.includes("mercury")) {
+            return "hazardous";
         }
+        if (label.includes("phone") || label.includes("laptop") || label.includes("tablet") || label.includes("monitor")) {
+            return "reusable";
+        }
+        return "recyclable";
+    }
 
-        fitCanvas();
-        window.addEventListener("resize", fitCanvas);
+    // pick max score
+    const sortedKeys = Object.keys(scores).sort((a, b) => scores[b] - scores[a]);
+    const winner = sortedKeys[0];
 
-        return () => window.removeEventListener("resize", fitCanvas);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [imageUrl, predictions, zoom]);
+    // tie-breaker: if top two are close (<10% difference) and one is hazardous, pick hazardous
+    const [first, second] = sortedKeys;
+    const firstScore = scores[first];
+    const secondScore = scores[second];
+    if (firstScore > 0 && secondScore > 0) {
+        const diff = (firstScore - secondScore) / Math.max(1, firstScore);
+        if (diff < 0.1 && (first === "recyclable" || second === "recyclable")) {
+            // if hazardous present among top two, pick hazardous
+            if (first === "hazardous" || second === "hazardous") return "hazardous";
+        }
+    }
+
+    return winner;
+};
+
+const ResultCard = ({ imageUrl, predictions = [], speed = "", onClear, loading = false, backendCategory = null }) => {
+    const sorted = (predictions || []).slice().sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
+    const top = sorted[0] || null;
+
+    // determine category using new decision function (prefers backendCategory if provided)
+    const categoryKey = useMemo(() => decideCategory(sorted, backendCategory), [sorted, backendCategory]);
+
+    const categoryInfo = CATEGORY_DEFS[categoryKey] || CATEGORY_DEFS.recyclable;
 
     return (
-        <div className="w-full h-full flex flex-col">
+        <div className="max-w-3xl w-full bg-white rounded-2xl shadow-lg p-6 transform transition-all duration-300">
+            <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4">
+                    <div className="w-28 h-28 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
+                        {loading ? (
+                            <div className="w-full h-full animate-pulse bg-gray-200" />
+                        ) : (
+                            <img
+                                src={placeholderImg}
+                                alt="uploaded"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.src = placeholderImg;
+                                }}
+                            />
+                        )}
+                    </div>
 
-            {/* Zoom Controls */}
-            <div className="flex gap-2 mb-2">
-                <button onClick={zoomOut} className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">−</button>
-                <button onClick={resetZoom} className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">Reset</button>
-                <button onClick={zoomIn} className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">+</button>
-            </div>
+                    <div className="flex flex-col">
+                        <h3 className="text-xl font-semibold text-gray-800">Classification Summary</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {speed ? `Processed in ${speed}` : "Confidence scores and suggestions shown below"}
+                        </p>
 
-            <div
-                ref={wrapperRef}
-                className="relative rounded-md shadow-md bg-white overflow-hidden"
-                style={{
-                    minHeight: 350,
-                    transform: `scale(${zoom})`,
-                    transformOrigin: "top center",
-                    transition: "transform 0.25s ease",
-                }}
-            >
-                <img
-                    ref={imgRef}
-                    src={imageUrl}
-                    alt="Uploaded e-waste"
-                    onLoad={() => {
-                        const evt = new Event("resize");
-                        setTimeout(() => window.dispatchEvent(evt), 50);
-                    }}
-                    className="w-full object-contain bg-gray-50"
-                    style={{ maxHeight: 600 }}
-                />
+                        {!loading && top && (
+                            <div className="mt-3">
+                                <div className="flex items-center gap-2">
+                                    <div
+                                        className={`px-3 py-1 rounded-full text-xs font-semibold ${categoryInfo.textColorClass} border ${categoryKey === "hazardous"
+                                                ? "border-red-200"
+                                                : categoryKey === "reusable"
+                                                    ? "border-blue-200"
+                                                    : "border-emerald-200"
+                                            } bg-white`}
+                                    >
+                                        {categoryInfo.title}
+                                    </div>
 
-                <canvas
-                    ref={canvasRef}
-                    style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        pointerEvents: "none",
-                        width: "100%",
-                        height: "100%",
-                    }}
-                />
-            </div>
+                                    <div className="px-2 py-1 rounded-md bg-gray-100 text-xs text-gray-700">
+                                        Top: <span className="font-medium">{top.label}</span>
+                                    </div>
 
-            {/* Predictions list */}
-            <div className="mt-4 bg-white p-4 rounded-md shadow-sm max-h-56 overflow-auto">
-                <div className="flex items-center justify-between">
-                    <h4 className="font-semibold">Predictions</h4>
-
-                    <div className="flex items-center gap-2">
-                        <button
-                            className="text-sm text-gray-600 hover:text-gray-800"
-                            on={() => setShowJson((s) => !s)}
-                        >
-                            {showJson ? "Hide JSON" : "Show JSON"}
-                        </button>
-
-                        <button
-                            className="text-sm text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded"
-                            onClick={() => { if (onClear) onClear(); }}
-                            title="Clear image & predictions"
-                        >
-                            Clear
-                        </button>
+                                    <div className="text-xs text-gray-500 ml-2">
+                                        {Math.round((top.confidence || 0) * 100)}% confidence
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => {
+                            if (sorted.length) navigator.clipboard?.writeText(sorted[0].label || "");
+                        }}
+                        title="Copy top label"
+                        className="p-2 rounded-md hover:bg-gray-100 transition"
+                    >
+                        <ClipboardIcon className="w-5 h-5 text-gray-600" />
+                    </button>
 
-                <div className="mt-3">
-                    {predictions && predictions.length ? (
-
-                        (() => {
-                            // Sort predictions (High → Low confidence)
-                            const sorted = [...predictions].sort(
-                                (a, b) => b.confidence - a.confidence
-                            );
-
-                            // Helper: Recommendation based on class
-                            const getRecommendation = (cls) => {
-                                switch (cls.toLowerCase()) {
-                                    case "recyclable":
-                                        return "This item is recyclable. Dispose at an authorised e-waste collection center.";
-                                    case "hazardous":
-                                        return "This item contains hazardous components. Handle with caution & follow safety guidelines.";
-                                    case "reusable":
-                                        return "This item seems reusable. Consider repairing, reselling, or donating it.";
-                                    default:
-                                        return "No recommendation available.";
-                                }
-                            };
-
-                            return (
-                                <ul className="space-y-4">
-                                    {sorted.map((p, i) => (
-                                        <li key={i} className="p-3 rounded-md border border-gray-200 bg-gray-50">
-
-                                            {/* Class Badge */}
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span
-                                                    className="px-2 py-0.5 text-xs text-white rounded"
-                                                    style={{ background: pickColor(p.class_name) }}
-                                                >
-                                                    {p.class_name}
-                                                </span>
-
-                                                <span className="text-xs text-gray-600">
-                                                    {(p.confidence * 100).toFixed(1)}%
-                                                </span>
-                                            </div>
-
-                                            {/* Confidence Bar */}
-                                            <div className="w-full bg-gray-200 h-2 rounded">
-                                                <div
-                                                    className="h-2 rounded"
-                                                    style={{
-                                                        background: pickColor(p.class_name),
-                                                        width: `${p.confidence * 100}%`,
-                                                    }}
-                                                ></div>
-                                            </div>
-
-                                            {/* BBox */}
-                                            <div className="text-xs text-gray-600 mt-2">
-                                                bbox: {p.bbox.map((n) => Number(n).toFixed(2)).join(", ")}
-                                            </div>
-
-                                            {/* Recommendation */}
-                                            <div className="mt-2 text-sm text-gray-700">
-                                                <strong>Suggestion:</strong> {getRecommendation(p.class_name)}
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            );
-                        })()
-
-                    ) : (
-                        <p className="text-gray-500 text-sm">No objects detected.</p>
-                    )}
+                    <button
+                        onClick={() => onClear && onClear()}
+                        title="Clear"
+                        className="p-2 rounded-md hover:bg-gray-100 transition"
+                    >
+                        <XMarkIcon className="w-5 h-5 text-gray-600" />
+                    </button>
                 </div>
+            </div>
 
-                {/* JSON Viewer */}
-                {showJson && (
-                    <pre className="mt-3 text-xs bg-gray-100 p-2 rounded overflow-auto">
-                        {JSON.stringify(predictions, null, 2)}
-                    </pre>
+            <div className="my-4 border-t" />
+
+            <div className="space-y-4">
+                {loading ? (
+                    <>
+                        <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4" />
+                        <div className="h-3 bg-gray-200 rounded animate-pulse" />
+                        <div className="h-3 bg-gray-200 rounded animate-pulse w-5/6" />
+                    </>
+                ) : sorted.length ? (
+                    sorted.map((p, idx) => (
+                        <div key={`${p.label}-${idx}`} className="w-full">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <div className="text-sm font-medium text-gray-800">{p.label}</div>
+                                    <div className="text-xs text-gray-500">
+                                        Confidence: {Math.round((p.confidence || 0) * 100)}%
+                                    </div>
+                                </div>
+
+                                <div className="w-48">
+                                    <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-2 rounded-full transition-all"
+                                            style={{
+                                                width: `${Math.min(
+                                                    100,
+                                                    Math.round((p.confidence || 0) * 100)
+                                                )}%`,
+                                                background:
+                                                    categoryKey === "hazardous"
+                                                        ? "linear-gradient(90deg,#f56565,#fc8181)"
+                                                        : categoryKey === "reusable"
+                                                            ? "linear-gradient(90deg,#2563eb,#60a5fa)"
+                                                            : "linear-gradient(90deg,#16a34a,#34d399)",
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="text-sm text-gray-500">No predictions available.</div>
                 )}
+            </div>
 
-                {/* Speed */}
-                {speed && (
-                    <div className="mt-3 text-xs text-gray-600">
-                        <strong>Speed:</strong> {speed}
+            <div className="mt-6 p-4 rounded-lg bg-gray-50 border">
+                <div className="flex items-start gap-4">
+                    <div>
+                        <div className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${categoryInfo.color} text-white`}>
+                            {categoryInfo.title}
+                        </div>
                     </div>
-                )}
 
+                    <div className="flex-1">
+                        <p className="text-gray-700">{categoryInfo.suggestion}</p>
 
-                {showJson && (
-                    <pre className="mt-3 text-xs bg-gray-100 p-2 rounded overflow-auto">
-                        {JSON.stringify(predictions, null, 2)}
-                    </pre>
-                )}
+                        <div className="mt-4 flex flex-wrap gap-3">
+                            {categoryInfo.ctas.map((c, i) => (
+                                <a
+                                    key={i}
+                                    href={c.href}
+                                    className={`px-4 py-2 rounded-md text-sm font-medium ${c.style} hover:opacity-95 transition`}
+                                >
+                                    {c.label}
+                                </a>
+                            ))}
 
-                {speed && (
-                    <div className="mt-3 text-xs text-gray-600">
-                        <strong>Speed:</strong> {speed}
+                            {categoryKey === "hazardous" && (
+                                <button
+                                    onClick={() => window.open("/safety#handling", "_blank")}
+                                    className="px-4 py-2 rounded-md text-sm border border-gray-200 bg-white"
+                                >
+                                    Handling tips
+                                </button>
+                            )}
+                        </div>
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );
-}
+};
+
+export default ResultCard;

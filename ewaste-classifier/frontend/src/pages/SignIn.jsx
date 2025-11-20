@@ -1,43 +1,51 @@
 // src/pages/SignInPage.jsx
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import axios from "axios";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import axios from "../utils/axiosInstance";
+import { useAuth } from "../hooks/useAuth";
 
-const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000";
-
-const SignInPage = () => {
+const SignIn = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const fromPath = location?.state?.from?.pathname || "/";
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((p) => ({ ...p, [name]: value }));
   };
 
   const submit = async (e) => {
     e.preventDefault();
-
     if (!formData.email || !formData.password) {
-      toast.error("Please enter all fields.");
+      toast.error("Please enter both email and password.");
       return;
     }
 
     try {
       setIsSubmitting(true);
-      const res = await axios.post(`${API_BASE}/auth/login`, formData);
+      const res = await axios.post("/auth/login", {
+        email: formData.email,
+        password: formData.password,
+      });
 
-      // backend returns { access_token, token_type, user }
+      // Backend returns: { access_token, token_type, user }
       const { access_token, user } = res.data;
 
-      localStorage.setItem("access_token", access_token);
-      localStorage.setItem("user", JSON.stringify(user));
+      // Save token + user via auth hook
+      login({ access_token, user });
 
       toast.success("Welcome back!");
-      // small delay so toast shows
-      setTimeout(() => navigate("/"), 500);
+      // Small delay to show toast
+      setTimeout(() => {
+        navigate(fromPath, { replace: true });
+      }, 500);
     } catch (err) {
       const msg =
         err?.response?.data?.detail ||
@@ -56,9 +64,7 @@ const SignInPage = () => {
         {/* LEFT — Sign In Form */}
         <div className="px-10 py-12 flex flex-col justify-center">
           <h1 className="text-3xl font-bold text-gray-800">Sign In</h1>
-          <p className="text-gray-600 mt-2 mb-8">
-            Sign in to continue your E-Cycle journey.
-          </p>
+          <p className="text-gray-600 mt-2 mb-8">Sign in to continue your E-Cycle journey.</p>
 
           <form className="space-y-5" onSubmit={submit}>
             <div>
@@ -71,6 +77,7 @@ const SignInPage = () => {
                 placeholder="you@example.com"
                 onChange={handleChange}
                 required
+                autoComplete="email"
               />
             </div>
 
@@ -84,14 +91,14 @@ const SignInPage = () => {
                 placeholder="••••••••"
                 onChange={handleChange}
                 required
+                autoComplete="current-password"
               />
             </div>
 
             <button
-              className="w-full bg-[#BBC863] text-white py-2 rounded-lg font-semibold 
-              hover:bg-[#a8b456] transition disabled:opacity-60"
+              type="submit"
+              className="w-full bg-[#BBC863] text-white py-2 rounded-lg font-semibold hover:bg-[#a8b456] transition disabled:opacity-60"
               disabled={isSubmitting}
-              aria-disabled={isSubmitting}
             >
               {isSubmitting ? "Signing In..." : "Sign In"}
             </button>
@@ -119,4 +126,4 @@ const SignInPage = () => {
   );
 };
 
-export default SignInPage;
+export default SignIn;

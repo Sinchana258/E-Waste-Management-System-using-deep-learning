@@ -1,14 +1,15 @@
 // src/pages/SignUp.jsx
 import React, { useState } from "react";
-import axios from "axios";
-import { toast, ToastContainer } from "react-toastify";
 import { Link, useNavigate } from "react-router-dom";
+import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-
-const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000";
+import axios from "../utils/axiosInstance";
+import { useAuth } from "../hooks/useAuth";
 
 const SignUp = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
+
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -33,6 +34,11 @@ const SignUp = () => {
       return;
     }
 
+    if (!formData.fullName || !formData.email || !formData.phone) {
+      toast.error("Please complete all required fields");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -43,16 +49,15 @@ const SignUp = () => {
         password: formData.password,
       };
 
-      const res = await axios.post(`${API_BASE}/auth/signup`, payload);
+      const res = await axios.post("/auth/signup", payload);
 
       // backend returns { access_token, token_type, user }
       const { access_token, user } = res.data;
 
-      localStorage.setItem("access_token", access_token);
-      localStorage.setItem("user", JSON.stringify(user));
+      // Hook to set auth state + localStorage
+      login({ access_token, user });
 
       toast.success("Registration successful!");
-      // SPA navigation
       setTimeout(() => navigate("/"), 700);
     } catch (err) {
       console.error(err);
@@ -67,7 +72,7 @@ const SignUp = () => {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center bg-[#E2F0C9]">
+    <div className="min-h-[80vh] flex items-center justify-center bg-[#E2F0C9] px-4">
       <ToastContainer />
       <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl grid grid-cols-1 md:grid-cols-2 overflow-hidden">
         {/* Left panel */}
@@ -148,10 +153,7 @@ const SignUp = () => {
             </div>
 
             <label className="flex items-center text-sm gap-2">
-              <input
-                type="checkbox"
-                onChange={() => setShowPassword((s) => !s)}
-              />
+              <input type="checkbox" onChange={() => setShowPassword((s) => !s)} />
               Show password
             </label>
 
