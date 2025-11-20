@@ -143,6 +143,8 @@ def health():
     return {"status": "ok"}
 
 
+
+
 @app.post("/classify")
 async def classify(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
@@ -151,8 +153,12 @@ async def classify(file: UploadFile = File(...)):
     contents = await file.read()
 
     try:
-        predictions = await run_inference(contents)  # async
-        return JSONResponse({"predictions": predictions})
+        result = await run_inference(contents)  # now returns dict with keys predictions, category, speed_ms
+        return JSONResponse({
+            "predictions": result.get("predictions", []),
+            "category": result.get("category"),       # may be None
+            "speed": f"{result.get('speed_ms', 0)}ms",
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
