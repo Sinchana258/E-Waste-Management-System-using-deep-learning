@@ -2,7 +2,7 @@
 import certifi, os
 from pymongo import MongoClient
 
-uri = os.getenv("MONGO_URI_TEST") or "mongodb+srv://sinchanat826_db_user:Q7TbLMJQxk5uVG1h@cluster0.qnjj2gw.mongodb.net/?appName=Cluster0"
+uri = os.getenv("MONGO_URI_TEST") or "mongodb://localhost:27017"
 print("Testing URI (masked):", uri[:60] + "...")
 
 try:

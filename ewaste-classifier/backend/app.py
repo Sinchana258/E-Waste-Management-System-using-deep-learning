@@ -14,11 +14,18 @@ import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from utils.inference import run_inference
 from database import bookings_collection
+from routes.valuation_routes import router as valuation_router
+
 
 load_dotenv()
 
 app = FastAPI()
 app.include_router(auth_router)
+app.include_router(valuation_router)
+
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "E-waste backend running"}
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 SMTP_HOST = os.getenv("SMTP_HOST")
@@ -56,7 +63,7 @@ bookings_collection = mongo_db[MONGO_BOOKINGS_COLLECTION]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # later you can change to [FRONTEND_URL]
+      allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],  # later you can change to [FRONTEND_URL]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
