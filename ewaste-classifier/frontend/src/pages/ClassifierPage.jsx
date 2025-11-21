@@ -77,11 +77,13 @@ const ClassifyPage = () => {
 
                         <div className="flex flex-col sm:flex-row gap-4">
                             <button
+                                onClick={() => (window.location.href = "/about")}
                                 className="px-6 py-3 rounded-lg text-white"
                                 style={{ backgroundColor: PRIMARY }}
                             >
                                 Learn How It Works
                             </button>
+
 
                             <a
                                 href="/facility-locator"

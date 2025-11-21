@@ -6,11 +6,13 @@ import Layout from "./components/Layout";
 import LandingPage from "./pages/LandingPage";
 import ClassifierPage from "./pages/ClassifierPage";
 import FacilityLocatorPage from "./pages/FacilityLocatorPage";
-import CostEstimatorPage from "./pages/CostEstimatorPage";
+import ValueEstimatorPage from "./pages/ValueEstimatorPage";
 import SlotSchedulingPage from "./pages/SlotSchedulingPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import AboutPage from "./pages/AboutPage";
 import ContactPage from "./pages/ContactPage";
+import NotFoundPage from "./pages/NotFoundPage";
+import Recycle from "./pages/recycle/Recycle";
 
 // Recycle pages
 import LaptopRecyclePage from "./pages/recycle/LaptopRecyclePage";
@@ -34,9 +36,11 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/classifier" element={<ClassifierPage />} />
           <Route path="/facility-locator" element={<FacilityLocatorPage />} />
-          <Route path="/cost-estimator" element={<CostEstimatorPage />} />
+          <Route path="/value-estimator" element={<ValueEstimatorPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
+          <Route path="/not-found" element={<NotFoundPage />} />
+          <Route path="/recycle" element={<Recycle />} />
 
           {/* Protected routes */}
           <Route

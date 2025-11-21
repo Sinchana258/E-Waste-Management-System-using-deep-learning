@@ -1,4 +1,4 @@
-// src/pages/recycle/AccessoriesRecyclePage.jsx
+// src/pages/recycle/OthererRecyclePage.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
@@ -7,94 +7,18 @@ import axios from "axios";
 import { facility } from "../../data/facility";
 
 /**
- * Decorative asset uploaded earlier — use exact local path (we'll transform to URL in dev environment).
- * Developer note: provided local path will be served by the environment: /mnt/data/31139e21-fece-4d9c-abef-f65c1c8bd0d0.png
+ * OthererRecyclePage
+ * - For devices that don't fit standard categories (unique / bulky / unusual items).
+ * - Freeform item name + description so users can explain what they have.
+ *
+ * Uses developer-provided logo path (will be transformed by your environment):
+ * /mnt/data/31139e21-fece-4c9c-abef-f65c1c8bd0d0.png
  */
-const LOGO_URL = "/mnt/data/31139e21-fece-4d9c-abef-f65c1c8bd0d0.png";
+const LOGO_URL = "/mnt/data/31139e21-fece-4c9c-abef-f65c1c8bd0d0.png";
 
-const ACCESSORY_CATEGORIES = [
-  {
-    category: "Headphones",
-    items: [
-      "Sony WH-1000XM4",
-      "Bose QuietComfort 35 II",
-      "AirPods Pro",
-      "Sennheiser HD 660 S",
-      "JBL Free X",
-    ],
-  },
-  {
-    category: "Chargers",
-    items: [
-      "Anker PowerPort",
-      "Belkin Boost Charge",
-      "Apple 20W USB-C Power Adapter",
-      "Samsung Super Fast Charger",
-      "RAVPower 60W 6-Port USB Charger",
-    ],
-  },
-  {
-    category: "Laptop Bags",
-    items: [
-      "SwissGear Travel Gear 1900 Scansmart TSA Laptop Backpack",
-      "AmazonBasics Laptop Backpack",
-      "Targus Drifter II Backpack",
-      "KROSER Laptop Backpack",
-      "Matein Travel Laptop Backpack",
-    ],
-  },
-  {
-    category: "External Hard Drives",
-    items: [
-      "WD Black 5TB P10 Game Drive",
-      "Seagate Backup Plus Slim 2TB",
-      "Samsung T5 Portable SSD",
-      "LaCie Rugged Mini 4TB",
-      "Toshiba Canvio Basics 1TB",
-    ],
-  },
-  {
-    category: "Smartwatches",
-    items: [
-      "Apple Watch Series 7",
-      "Samsung Galaxy Watch 4",
-      "Fitbit Charge 5",
-      "Garmin Venu 2",
-      "Amazfit GTR 3",
-    ],
-  },
-  {
-    category: "Mouse and Keyboards",
-    items: [
-      "Logitech MX Master 3",
-      "Razer DeathAdder Elite",
-      "Apple Magic Keyboard",
-      "Corsair K95 RGB Platinum XT",
-      "HP Wireless Elite Keyboard",
-    ],
-  },
-  {
-    category: "Power Banks",
-    items: [
-      "Anker PowerCore 26800mAh",
-      "RAVPower Portable Charger 20000mAh",
-      "Xiaomi Mi Power Bank 3",
-      "AUKEY Portable Charger 10000mAh",
-      "Samsung Wireless Charger Portable Battery 10,000mAh",
-    ],
-  },
-];
-
-// Try to import a shared axiosInstance; fallback to default axios if not available.
 let axiosInstance = axios;
 try {
-  // eslint-disable-next-line import/no-unresolved
-  // If you have src/utils/axiosInstance.js, it should export a configured axios instance.
-  // The `try/catch` ensures this file still works if that module doesn't exist.
-  // You can remove this fallback if you always have axiosInstance present.
-  // Note: bundlers may still tree-shake; this pattern is tolerant in dev.
-  // If you prefer, simply `import axiosInstance from "../../utils/axiosInstance";`
-  // but the try/catch prevents a hard import failure.
+  // optional local axios instance fallback
   // eslint-disable-next-line global-require
   const maybe = require("../../utils/axiosInstance");
   if (maybe && maybe.default) axiosInstance = maybe.default;
@@ -103,15 +27,16 @@ try {
   // use default axios
 }
 
-const AccessoriesRecyclePage = () => {
+const OthererRecyclePage = () => {
   const location = useLocation();
   const mountedRef = useRef(true);
 
-  // Prefill category from router state (SlotSchedulingPage passes `state={{ selectedCategory }}`)
-  const initialCategory = location?.state?.selectedCategory || "";
+  // Prefill category from router state (if available)
+  const initialCategory = location?.state?.selectedCategory || "Other";
 
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [selectedItem, setSelectedItem] = useState("");
+  const [category] = useState(initialCategory);
+  const [itemName, setItemName] = useState("");
+  const [itemDescription, setItemDescription] = useState("");
   const [selectedFacility, setSelectedFacility] = useState("");
   const [recycleItemPrice, setRecycleItemPrice] = useState("");
   const [pickupDate, setPickupDate] = useState("");
@@ -122,48 +47,30 @@ const AccessoriesRecyclePage = () => {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [items, setItems] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastBookingSummary, setLastBookingSummary] = useState(null);
 
   const currentDate = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
-    // populate items if initial category provided
-    if (initialCategory) {
-      const found = ACCESSORY_CATEGORIES.find((c) => c.category === initialCategory);
-      setItems(found ? found.items : []);
-    }
     return () => {
       mountedRef.current = false;
     };
-  }, [initialCategory]);
+  }, []);
 
-  const handleCategoryChange = (e) => {
-    const category = e.target.value;
-    setSelectedCategory(category);
-    setSelectedItem("");
-    setSelectedFacility("");
-
-    const found = ACCESSORY_CATEGORIES.find((c) => c.category === category);
-    setItems(found ? found.items : []);
-  };
-
-  // basic validation helpers
   const validateEmail = (str) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(str).toLowerCase());
 
   const validatePhone = (str) =>
-    // allow +91 or 10 digit local numbers; adapt as needed
     /^(\+?\d{1,3}[- ]?)?\d{10}$/.test(String(str));
 
   const handleSubmit = async () => {
-    const recycleItem = `${selectedCategory} ${selectedItem}`.trim();
+    const recycleItem = `${category} : ${itemName}`.trim();
 
     if (
-      !recycleItem ||
+      !itemName ||
+      !itemDescription ||
       !selectedFacility ||
       !recycleItemPrice ||
       !pickupDate ||
@@ -173,7 +80,7 @@ const AccessoriesRecyclePage = () => {
       !phone ||
       !address
     ) {
-      toast.error("Please fill in all the required fields.", { autoClose: 3000 });
+      toast.error("Please fill in all required fields.", { autoClose: 3000 });
       return;
     }
 
@@ -196,13 +103,13 @@ const AccessoriesRecyclePage = () => {
         return null;
       }
     })();
-
     const userId = storedUser?.id || "";
 
     const newBooking = {
       userId,
       userEmail: email,
       recycleItem,
+      recycleItemDetails: itemDescription,
       recycleItemPrice: Number(recycleItemPrice),
       pickupDate,
       pickupTime,
@@ -215,16 +122,11 @@ const AccessoriesRecyclePage = () => {
     try {
       setIsLoading(true);
 
-      // Use axiosInstance if available; otherwise default to axios
       const resp = await axiosInstance.post(
         `${process.env.REACT_APP_API_BASE || "http://localhost:8000"}/api/v1/booking`,
         newBooking,
         {
-          headers: {
-            "Content-Type": "application/json",
-            // optionally include Authorization if you issue bearer tokens:
-            // Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`
-          },
+          headers: { "Content-Type": "application/json" },
           timeout: 15000,
         }
       );
@@ -246,7 +148,9 @@ const AccessoriesRecyclePage = () => {
           autoClose: 3000,
         });
 
-        // Clear form fields
+        // Clear form
+        setItemName("");
+        setItemDescription("");
         setSelectedFacility("");
         setRecycleItemPrice("");
         setPickupDate("");
@@ -255,9 +159,6 @@ const AccessoriesRecyclePage = () => {
         setFullName("");
         setEmail("");
         setPhone("");
-        setSelectedCategory("");
-        setSelectedItem("");
-        setItems([]);
       } else {
         console.error("Booking error response:", resp);
         toast.error("Error submitting data. Please try again.", { autoClose: 3000 });
@@ -274,7 +175,6 @@ const AccessoriesRecyclePage = () => {
     }
   };
 
-  // Submit handler used by onSubmit
   const onSubmit = (e) => {
     e.preventDefault();
     handleSubmit();
@@ -294,9 +194,9 @@ const AccessoriesRecyclePage = () => {
             />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">Accessories Recycling</h1>
+            <h1 className="text-2xl font-bold">Other Electronics Recycling</h1>
             <p className="text-sm text-gray-600">
-              Schedule a pickup for your accessories — headphones, chargers, power banks, and more.
+              Have an unusual electronic item? Describe it below and we'll handle the rest.
             </p>
           </div>
         </div>
@@ -336,50 +236,41 @@ const AccessoriesRecyclePage = () => {
             />
           </div>
 
-          {/* Category */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="category">
-              Category <span className="text-red-500">*</span>
+          {/* Item Name (freeform) */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="itemName">
+              Item name / short title <span className="text-red-500">*</span>
             </label>
-            <select
-              id="category"
-              value={selectedCategory}
-              onChange={handleCategoryChange}
+            <input
+              id="itemName"
+              name="itemName"
+              type="text"
+              value={itemName}
+              onChange={(e) => setItemName(e.target.value)}
               className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#5a8807]"
+              placeholder="e.g., Old UPS battery cabinet, PCB stack, Medical monitor"
               aria-required="true"
-            >
-              <option value="">Select category</option>
-              {ACCESSORY_CATEGORIES.map((c) => (
-                <option key={c.category} value={c.category}>
-                  {c.category}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
-          {/* Item */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="item">
-              Item <span className="text-red-500">*</span>
+          {/* Item Description */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="itemDescription">
+              Short description (condition, weight estimate, dimensions) <span className="text-red-500">*</span>
             </label>
-            <select
-              id="item"
-              value={selectedItem}
-              onChange={(e) => setSelectedItem(e.target.value)}
+            <textarea
+              id="itemDescription"
+              name="itemDescription"
+              rows="4"
+              value={itemDescription}
+              onChange={(e) => setItemDescription(e.target.value)}
               className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#5a8807]"
+              placeholder="Describe condition, approximate weight (kg), hazardous batteries present, etc."
               aria-required="true"
-              disabled={!items.length}
-            >
-              <option value="">{items.length ? "Select item" : "Choose a category first"}</option>
-              {items.map((it) => (
-                <option key={it} value={it}>
-                  {it}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
-          {/* Price */}
+          {/* Approx value */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="price">
               Approx value (₹) <span className="text-red-500">*</span>
@@ -392,7 +283,7 @@ const AccessoriesRecyclePage = () => {
               value={recycleItemPrice}
               onChange={(e) => setRecycleItemPrice(e.target.value)}
               className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#5a8807]"
-              placeholder="100"
+              placeholder="Estimated value (optional but helpful)"
               aria-required="true"
             />
           </div>
@@ -504,19 +395,8 @@ const AccessoriesRecyclePage = () => {
                     fill="none"
                     aria-hidden="true"
                   >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                    />
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                   </svg>
                   Submitting...
                 </>
@@ -586,4 +466,4 @@ const AccessoriesRecyclePage = () => {
   );
 };
 
-export default AccessoriesRecyclePage;
+export default OthererRecyclePage;

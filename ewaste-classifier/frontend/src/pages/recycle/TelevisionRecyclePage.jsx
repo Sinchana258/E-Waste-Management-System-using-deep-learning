@@ -1,10 +1,25 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { facility } from "../../data/facility"; // adjust path if needed
+import axios from "axios";
+import { facility } from "../../data/facility";
+
+const LOGO_URL = "/mnt/data/31139e21-fece-4d9c-abef-f65c1c8bd0d0.png";
+let axiosInstance = axios;
+try {
+  // eslint-disable-next-line global-require
+  const maybe = require("../../utils/axiosInstance");
+  if (maybe && maybe.default) axiosInstance = maybe.default;
+  else if (maybe) axiosInstance = maybe;
+} catch { }
 
 const TelevisionPage = () => {
-  const [selectedBrand, setSelectedBrand] = useState("");
+  const location = useLocation();
+  const mountedRef = useRef(true);
+  const initialBrand = location?.state?.selectedBrand || "";
+
+  const [selectedBrand, setSelectedBrand] = useState(initialBrand);
   const [selectedModel, setSelectedModel] = useState("");
   const [selectedFacility, setSelectedFacility] = useState("");
   const [recycleItemPrice, setRecycleItemPrice] = useState("");
@@ -21,6 +36,9 @@ const TelevisionPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastBookingSummary, setLastBookingSummary] = useState(null);
+
+
+  // populate default TV brands & models (use your full list from earlier)
 
   // Populate TV brands & models
   useEffect(() => {
@@ -98,46 +116,43 @@ const TelevisionPage = () => {
     ];
 
     setBrands(televisionData);
-  }, []);
+
+    if (initialBrand) {
+      const found = televisionData.find((b) => b.brand === initialBrand);
+      setModels(found ? found.models : []);
+    }
+
+    return () => { mountedRef.current = false; };
+  }, [initialBrand]);
 
   const handleBrandChange = (e) => {
     const brand = e.target.value;
     setSelectedBrand(brand);
     setSelectedModel("");
     setSelectedFacility("");
-
-    const selected = brands.find((b) => b.brand === brand);
-    if (selected) {
-      setModels(selected.models);
-    } else {
-      setModels([]);
-    }
+    const found = brands.find((b) => b.brand === brand);
+    setModels(found ? found.models : []);
   };
 
+  const validateEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s).toLowerCase());
+  const validatePhone = (s) => /^(\+?\d{1,3}[- ]?)?\d{10}$/.test(String(s));
   const currentDate = new Date().toISOString().split("T")[0];
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e?.preventDefault?.();
     const recycleItem = `${selectedBrand} ${selectedModel}`.trim();
-
-    if (
-      !recycleItem ||
-      !selectedFacility ||
-      !recycleItemPrice ||
-      !pickupDate ||
-      !pickupTime ||
-      !fullName ||
-      !email ||
-      !phone ||
-      !address
-    ) {
-      toast.error("Please fill in all the required fields.", {
-        autoClose: 3000,
-      });
+    if (!recycleItem || !selectedFacility || !recycleItemPrice || !pickupDate || !pickupTime || !fullName || !email || !phone || !address) {
+      toast.error("Please fill in all required fields.", { autoClose: 3000 });
       return;
     }
+    if (!validateEmail(email)) { toast.error("Enter a valid email."); return; }
+    if (!validatePhone(phone)) { toast.error("Enter a valid phone number."); return; }
 
-    const newBooking = {
-      userId: null, // you can replace this with real user id if you add auth
+    const storedUser = (() => { try { return JSON.parse(localStorage.getItem("user")); } catch { return null; } })();
+    const userId = storedUser?.id || "guest";
+
+    const payload = {
+      userId,
       userEmail: email,
       recycleItem,
       recycleItemPrice: Number(recycleItemPrice),
@@ -151,337 +166,127 @@ const TelevisionPage = () => {
 
     try {
       setIsLoading(true);
+      const base = process.env.REACT_APP_API_BASE || "http://localhost:8000";
+      const resp = await axiosInstance.post(`${base}/api/v1/booking`, payload, { headers: { "Content-Type": "application/json" }, timeout: 15000 });
 
-      const response = await fetch("http://localhost:8000/api/v1/booking", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(newBooking),
-      });
-
-
-      if (response.ok) {
-        // ✨ Build a small summary for the modal
-        const summary = {
-          recycleItem,
-          pickupDate,
-          pickupTime,
-          facility: selectedFacility,
-          address,
-          userEmail: email,
-        };
-
+      if (resp.status >= 200 && resp.status < 300) {
+        const summary = { recycleItem, pickupDate, pickupTime, facility: selectedFacility, address, userEmail: email };
         setLastBookingSummary(summary);
         setShowSuccessModal(true);
-
-        // ✅ nicer toast
-        toast.success("Booking confirmed! A confirmation email has been sent.", {
-          autoClose: 3000,
-        });
-        setSelectedBrand("");
-        setSelectedModel("");
-        setSelectedFacility("");
-        setRecycleItemPrice("");
-        setPickupDate("");
-        setPickupTime("");
-        setAddress("");
-        setFullName("");
-        setEmail("");
-        setPhone("");
-        setIsLoading(false);
-
+        toast.success("Booking confirmed! Confirmation email sent.", { autoClose: 3000 });
+        // reset
+        setSelectedBrand(""); setSelectedModel(""); setSelectedFacility(""); setRecycleItemPrice(""); setPickupDate(""); setPickupTime(""); setAddress(""); setFullName(""); setEmail(""); setPhone(""); setModels([]);
       } else {
-        toast.error("Error submitting data.", { autoClose: 3000 });
+        toast.error("Booking failed. Try again.");
       }
-
     } catch (err) {
       console.error(err);
-      toast.error("Error submitting data.", { autoClose: 3000 });
+      toast.error(err?.response?.data?.detail || "Network error. Try again.", { autoClose: 4000 });
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   };
 
-
-  if (isLoading) {
-    return (
-      <div className="loader-container flex flex-col items-center justify-center h-screen">
-        <div className="loader mb-4" />
-        <div className="loading-text text-xl">Submitting...</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="container mx-auto p-8">
+    <div className="container mx-auto p-6">
       <ToastContainer />
-
-      <h1 className="text-4xl font-bold mb-6 p-6 text-center">
-        Television Recycling
-      </h1>
-
-      <form
-        className="grid grid-cols-1 md:grid-cols-2 mx-8 md:mx-0 gap-4 justify-center"
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSubmit();
-        }}
-      >
-        {/* Brand */}
-        <div className="mb-4">
-          <label
-            htmlFor="brand"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Select Brand:
-          </label>
-          <select
-            id="brand"
-            value={selectedBrand}
-            onChange={handleBrandChange}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          >
-            <option value="">Select Brand</option>
-            {brands.map((brand) => (
-              <option key={brand.brand} value={brand.brand}>
-                {brand.brand}
-              </option>
-            ))}
-          </select>
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="flex items-center gap-4 p-6 border-b">
+          <div className="w-14 h-14 rounded-full bg-[#E2F0C9] p-2 flex items-center justify-center">
+            <img src={LOGO_URL} alt="logo" className="object-contain w-full h-full" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold">Television Recycling</h1>
+            <p className="text-sm text-gray-600">Schedule pickup for TVs of any size — we handle disposal safely.</p>
+          </div>
         </div>
 
-        {/* Model */}
-        <div className="mb-4">
-          <label
-            htmlFor="model"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Select Model:
-          </label>
-          <select
-            id="model"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          >
-            <option value="">Select Model</option>
-            {models.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))}
-          </select>
-        </div>
+        <form className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6" onSubmit={handleSubmit}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Brand *</label>
+            <select value={selectedBrand} onChange={handleBrandChange} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]">
+              <option value="">Select Brand</option>
+              {brands.map((b) => <option key={b.brand} value={b.brand}>{b.brand}</option>)}
+            </select>
+          </div>
 
-        {/* Price */}
-        <div className="mb-4">
-          <label
-            htmlFor="recycleItemPrice"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Recycle Item Price:
-          </label>
-          <input
-            type="number"
-            id="recycleItemPrice"
-            value={recycleItemPrice}
-            onChange={(e) => setRecycleItemPrice(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Model *</label>
+            <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" disabled={!models.length}>
+              <option value="">{models.length ? "Select model" : "Choose brand first"}</option>
+              {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
 
-        {/* Pickup Date */}
-        <div className="mb-4">
-          <label
-            htmlFor="pickupDate"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Pickup Date:
-          </label>
-          <input
-            type="date"
-            id="pickupDate"
-            value={pickupDate}
-            min={currentDate}
-            onChange={(e) => setPickupDate(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Approx value (₹) *</label>
+            <input type="number" min="0" value={recycleItemPrice} onChange={(e) => setRecycleItemPrice(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" />
+          </div>
 
-        {/* Pickup Time */}
-        <div className="mb-4">
-          <label
-            htmlFor="pickupTime"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Pickup Time:
-          </label>
-          <input
-            type="time"
-            id="pickupTime"
-            value={pickupTime}
-            onChange={(e) => setPickupTime(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pickup date *</label>
+            <input type="date" min={currentDate} value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" />
+          </div>
 
-        {/* Full Name */}
-        <div className="mb-4">
-          <label
-            htmlFor="fullName"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Full Name:
-          </label>
-          <input
-            type="text"
-            id="fullName"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pickup time *</label>
+            <input type="time" value={pickupTime} onChange={(e) => setPickupTime(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" />
+          </div>
 
-        {/* Email */}
-        <div className="mb-4">
-          <label
-            htmlFor="email"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Email:
-          </label>
-          <input
-            type="email"
-            id="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Full name *</label>
+            <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" />
+          </div>
 
-        {/* Address */}
-        <div className="mb-4">
-          <label
-            htmlFor="address"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Location / Address:
-          </label>
-          <input
-            type="text"
-            id="address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" />
+          </div>
 
-        {/* Phone */}
-        <div className="mb-4">
-          <label
-            htmlFor="phone"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Phone:
-          </label>
-          <input
-            type="tel"
-            id="phone"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          />
-        </div>
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Pickup address *</label>
+            <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" />
+          </div>
 
-        {/* Facility */}
-        <div className="mb-4">
-          <label
-            htmlFor="facility"
-            className="block text-2xl font-medium text-gray-600"
-          >
-            Select Facility:
-          </label>
-          <select
-            id="facility"
-            value={selectedFacility}
-            onChange={(e) => setSelectedFacility(e.target.value)}
-            className="w-full p-2 sign-field rounded-md placeholder:font-light placeholder:text-gray-500"
-          >
-            <option value="">Select Facility</option>
-            {facility.map((f) => (
-              <option key={f.name} value={f.name}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]" />
+          </div>
 
-        {/* Submit */}
-        <div className="mb-4 md:col-span-2">
-          <button
-            type="submit"
-            className="bg-[#5a8807] text-xl text-white px-6 py-3 rounded-md w-full"
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Facility *</label>
+            <select value={selectedFacility} onChange={(e) => setSelectedFacility(e.target.value)} className="w-full p-2 border rounded-md focus:ring-2 focus:ring-[#5a8807]">
+              <option value="">Select facility</option>
+              {facility.map((f) => <option key={f.name} value={f.name}>{f.name} — {f.address}</option>)}
+            </select>
+          </div>
 
-          >
-            Submit
-          </button>
-        </div>
-      </form>
-      {showSuccessModal && lastBookingSummary && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-fade-in-up">
-            <div className="flex items-center justify-center mb-4">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
-                <span className="text-3xl">✅</span>
-              </div>
-            </div>
-
-            <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
-              Booking Confirmed!
-            </h2>
-            <p className="text-center text-gray-600 mb-4">
-              We’ve sent a confirmation email to{" "}
-              <span className="font-semibold">{lastBookingSummary.userEmail}</span>.
-            </p>
-
-            <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm space-y-2">
-              <div className="flex justify-between">
-                <span className="font-medium text-gray-700">Item</span>
-                <span className="text-gray-800">
-                  {lastBookingSummary.recycleItem}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium text-gray-700">Slot</span>
-                <span className="text-gray-800">
-                  {lastBookingSummary.pickupDate} at {lastBookingSummary.pickupTime}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium text-gray-700">Facility</span>
-                <span className="text-gray-800">
-                  {lastBookingSummary.facility}
-                </span>
-              </div>
-              <div>
-                <span className="font-medium text-gray-700">Pickup Address</span>
-                <p className="text-gray-800 text-right">
-                  {lastBookingSummary.address}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowSuccessModal(false)}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition-colors duration-200"
-            >
-              Got it
+          <div className="md:col-span-2 mt-2">
+            <button type="submit" disabled={isLoading} className={`w-full py-3 rounded-md text-white ${isLoading ? "bg-gray-400" : "bg-[#5a8807] hover:bg-[#86c418]"}`}>
+              {isLoading ? "Submitting..." : "Schedule Pickup"}
             </button>
+          </div>
+        </form>
+      </div>
+
+      {showSuccessModal && lastBookingSummary && (
+        <div role="dialog" aria-modal="true" className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">✅</div>
+              <h2 className="text-lg font-semibold">Booking Confirmed!</h2>
+              <p className="text-sm text-gray-600 text-center">A confirmation was sent to <strong>{lastBookingSummary.userEmail}</strong>.</p>
+              <div className="w-full bg-gray-50 rounded-xl p-4 text-sm">
+                <div className="flex justify-between"><span className="font-medium">Item</span><span>{lastBookingSummary.recycleItem}</span></div>
+                <div className="flex justify-between"><span className="font-medium">Slot</span><span>{lastBookingSummary.pickupDate} at {lastBookingSummary.pickupTime}</span></div>
+                <div className="flex justify-between"><span className="font-medium">Facility</span><span>{lastBookingSummary.facility}</span></div>
+                <div className="mt-2"><span className="font-medium">Address</span><p className="text-right">{lastBookingSummary.address}</p></div>
+              </div>
+              <button onClick={() => setShowSuccessModal(false)} className="w-full bg-[#5a8807] text-white py-2 rounded-xl">Got it</button>
+            </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };

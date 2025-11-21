@@ -24,7 +24,7 @@ const features = [
         title: "Value Estimator",
         desc: "Get instant price estimates for your e-waste items — sell or recycle smarter.",
         icon: <FiDollarSign size={20} />,
-        to: "/cost-estimator",
+        to: "/value-estimator",
         protected: false,
     },
     {
@@ -185,7 +185,7 @@ const LandingPage = () => {
                                         Classify an item
                                     </button>
                                     <button
-                                        onClick={() => handleNavigate("/cost-estimator")}
+                                        onClick={() => handleNavigate("/value-estimator")}
                                         className="text-sm bg-white border px-3 py-2 rounded-md"
                                     >
                                         Estimate value

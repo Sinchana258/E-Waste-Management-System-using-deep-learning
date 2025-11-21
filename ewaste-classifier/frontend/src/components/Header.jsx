@@ -11,7 +11,7 @@ const NAV_ITEMS = [
     { label: "Home", path: "/", protected: false },
     { label: "Facility Locator", path: "/facility-locator", protected: false },
     { label: "E-Waste Classifier", path: "/classifier", protected: false },
-    { label: "Cost Estimator", path: "/cost-estimator", protected: false },
+    { label: "Cost Estimator", path: "/value-estimator", protected: false },
     { label: "Market Place", path: "/ewaste-marketplace", protected: true },
     { label: "Slot Scheduling", path: "/slot-scheduling", protected: true },
     { label: "About", path: "/about", protected: false },

@@ -101,7 +101,7 @@ const Footer = () => {
                             </Link>
                         </li>
                         <li>
-                            <Link to="/facilities" className="hover:text-white transition">
+                            <Link to="/facility-locator" className="hover:text-white transition">
                                 Facilities
                             </Link>
                         </li>
@@ -125,7 +125,7 @@ const Footer = () => {
                         </p>
                         <p className="flex items-center gap-2">
                             <IonIcon icon={mail} />
-                            contact@ecycle.com
+                            contactus.e.cycle@gmail.com
                         </p>
                     </div>
 

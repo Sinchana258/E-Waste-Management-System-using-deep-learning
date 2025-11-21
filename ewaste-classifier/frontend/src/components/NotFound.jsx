@@ -1,9 +1,8 @@
-
-// src/pages/NotFoundPage.jsx
+// src/pages/NotFound.jsx
 import React from "react";
 import { Link } from "react-router-dom";
 
-const NotFoundPage = () => {
+const NotFound = () => {
     return (
         <div className="px-4 w-full py-20 md:py-28 bg-[#E2F0C9] flex items-center justify-center">
             <div className="max-w-2xl text-center">
@@ -39,4 +38,4 @@ const NotFoundPage = () => {
     );
 };
 
-export default NotFoundPage;
+export default NotFound;

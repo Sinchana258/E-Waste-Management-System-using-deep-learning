@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@emailjs/browser": "^4.4.1",
     "@heroicons/react": "^2.2.0",
     "@ionic/react": "^8.7.4",
     "@mapbox/mapbox-gl-geocoder": "^5.1.2",

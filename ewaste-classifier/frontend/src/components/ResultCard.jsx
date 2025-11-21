@@ -73,7 +73,7 @@ const CATEGORY_DEFS = {
             "This device looks reusable or resellable. Consider donating, listing it in the marketplace, or selling to extend the device's life.",
         ctas: [
             { label: "Post to Marketplace", href: "/ewaste-marketplace", style: "bg-blue-600 text-white" },
-            { label: "Estimate Value", href: "/cost-estimator", style: "border border-blue-200 text-blue-700 bg-white" }
+            { label: "Estimate Value", href: "/value-estimator", style: "border border-blue-200 text-blue-700 bg-white" }
         ],
     },
     recyclable: {
@@ -104,7 +104,7 @@ const CATEGORY_DEFS = {
             "This item can be recycled. Drop it at a certified e-waste recycling center so materials are recovered responsibly.",
         ctas: [
             { label: "Find Facility", href: "/facility-locator", style: "bg-emerald-600 text-white" },
-            { label: "Estimate Value", href: "/cost-estimator", style: "border border-emerald-200 text-emerald-700 bg-white" }
+            { label: "Estimate Value", href: "/value-estimator", style: "border border-emerald-200 text-emerald-700 bg-white" }
         ],
     },
 };
@@ -201,12 +201,12 @@ const ResultCard = ({ imageUrl, predictions = [], speed = "", onClear, loading =
                             <div className="w-full h-full animate-pulse bg-gray-200" />
                         ) : (
                             <img
-                                src={placeholderImg}
+                                src={imageUrl || placeholderImg}
                                 alt="uploaded"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                    e.currentTarget.onerror = null;
                                     e.currentTarget.src = placeholderImg;
+                                    e.currentTarget.onerror = null;
                                 }}
                             />
                         )}
@@ -223,10 +223,10 @@ const ResultCard = ({ imageUrl, predictions = [], speed = "", onClear, loading =
                                 <div className="flex items-center gap-2">
                                     <div
                                         className={`px-3 py-1 rounded-full text-xs font-semibold ${categoryInfo.textColorClass} border ${categoryKey === "hazardous"
-                                                ? "border-red-200"
-                                                : categoryKey === "reusable"
-                                                    ? "border-blue-200"
-                                                    : "border-emerald-200"
+                                            ? "border-red-200"
+                                            : categoryKey === "reusable"
+                                                ? "border-blue-200"
+                                                : "border-emerald-200"
                                             } bg-white`}
                                     >
                                         {categoryInfo.title}
