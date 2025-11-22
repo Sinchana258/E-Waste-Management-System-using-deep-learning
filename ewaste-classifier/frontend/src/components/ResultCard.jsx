@@ -72,7 +72,7 @@ const CATEGORY_DEFS = {
         suggestion:
             "This device looks reusable or resellable. Consider donating, listing it in the marketplace, or selling to extend the device's life.",
         ctas: [
-            { label: "Post to Marketplace", href: "/ewaste-marketplace", style: "bg-blue-600 text-white" },
+            { label: "Post to Marketplace", href: "/marketplace", style: "bg-blue-600 text-white" },
             { label: "Estimate Value", href: "/value-estimator", style: "border border-blue-200 text-blue-700 bg-white" }
         ],
     },

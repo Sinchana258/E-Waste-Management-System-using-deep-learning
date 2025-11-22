@@ -12,10 +12,12 @@ const NAV_ITEMS = [
     { label: "Facility Locator", path: "/facility-locator", protected: false },
     { label: "E-Waste Classifier", path: "/classifier", protected: false },
     { label: "Cost Estimator", path: "/value-estimator", protected: false },
-    { label: "Market Place", path: "/ewaste-marketplace", protected: true },
+    { label: "Market Place", path: "/marketplace", protected: true },
     { label: "Slot Scheduling", path: "/slot-scheduling", protected: true },
+    { label: "Education", path: "/education", protected: false },
     { label: "About", path: "/about", protected: false },
     { label: "Contact", path: "/contact", protected: false },
+
 ];
 
 const Header = () => {

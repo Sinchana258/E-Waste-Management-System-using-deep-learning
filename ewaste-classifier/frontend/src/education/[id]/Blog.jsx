@@ -1,27 +1,26 @@
-"use client";
+// app/education/[id]/Blog.jsx
 import React, { useEffect, useState } from "react";
-import { blogs } from "@/app/data/blogs";
-import Image from "next/image";
-import Link from "next/link";
-import { randomBlogs } from "@/app/data/blogs";
+import { useParams, Link } from "react-router-dom";
+import { blogs, randomBlogs } from "../../data/blogs";
 
-interface BlogPageProps {
-  params: {
-    id: string;
-  };
-}
+const PRIMARY = "#5A8807";
+const PRIMARY_LIGHT = "#E8F5D4";
 
-const Blog: React.FC<BlogPageProps> = ({ params }) => {
+const Blog = () => {
+  const { id } = useParams(); // <-- from URL /education/:id
+  const numericId = Number(id);
+
   const [relatedBlogs, setRelatedBlogs] = useState(() => {
     const randomBlogsResult = randomBlogs(3);
-    return randomBlogsResult.filter(blog => blog.id !== Number(params.id)).slice(0, 3);
+    return randomBlogsResult.filter((blog) => blog.id !== numericId).slice(0, 3);
   });
+
   const [readingProgress, setReadingProgress] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => {
       const totalHeight = document.body.scrollHeight - window.innerHeight;
-      const progress = (window.scrollY / totalHeight) * 100;
+      const progress = totalHeight > 0 ? (window.scrollY / totalHeight) * 100 : 0;
       setReadingProgress(progress);
     };
 
@@ -29,16 +28,22 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  if (!params?.id) return <div>Invalid Blog ID</div>;
-  const id = Number(params.id);
-  const blog = blogs.find((blog) => blog.id === id);
+  if (!id) return <div>Invalid Blog ID</div>;
+
+  const blog = blogs.find((b) => b.id === numericId);
 
   if (!blog) {
     return (
       <div className="text-center py-20">
         <h1 className="text-3xl font-bold text-gray-800 mb-4">Blog Not Found</h1>
-        <p className="text-gray-600 mb-8">The blog you&apos;re looking for doesn&apos;t exist or has been removed.</p>
-        <Link href="/education" className="text-emerald-600 hover:text-emerald-800 font-medium">
+        <p className="text-gray-600 mb-8">
+          The blog you&apos;re looking for doesn&apos;t exist or has been removed.
+        </p>
+        <Link
+          to="/education"
+          className="font-medium"
+          style={{ color: PRIMARY }}
+        >
           Return to Education Hub
         </Link>
       </div>
@@ -50,24 +55,24 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
       {/* Reading progress bar */}
       <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 z-50">
         <div
-          className="h-full bg-emerald-600 transition-all duration-150"
-          style={{ width: `${readingProgress}%` }}
-        ></div>
+          className="h-full transition-all duration-150"
+          style={{ width: `${readingProgress}%`, backgroundColor: PRIMARY }}
+        />
       </div>
 
-      {/* Hero Section */}
+      {/* Hero */}
       <div className="relative h-96 md:h-[500px] w-full">
-        <Image
+        <img
           src={blog.image}
           alt={blog.title}
-          width={1920}
-          height={1080}
           className="w-full h-full object-cover brightness-[0.6]"
-          priority
         />
         <div className="absolute inset-0 flex flex-col justify-center items-center text-center p-4 md:p-8">
           <div className="max-w-4xl">
-            <span className="inline-block bg-emerald-100 text-emerald-800 text-xs font-medium px-2.5 py-0.5 rounded mb-4">
+            <span
+              className="inline-block text-xs font-medium px-2.5 py-0.5 rounded mb-4"
+              style={{ backgroundColor: PRIMARY_LIGHT, color: PRIMARY }}
+            >
               {blog.category}
             </span>
             <h1 className="text-3xl md:text-5xl font-bold text-white mb-6 leading-tight">
@@ -76,7 +81,10 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
             <div className="flex flex-col md:flex-row items-center justify-center text-white space-y-4 md:space-y-0 md:space-x-6">
               {blog.author && (
                 <div className="flex items-center">
-                  <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold mr-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold mr-3"
+                    style={{ backgroundColor: PRIMARY }}
+                  >
                     {blog.author.charAt(0)}
                   </div>
                   <div className="text-left">
@@ -86,8 +94,19 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
                 </div>
               )}
               <div className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 mr-1"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
                 <span>{blog.readTime}</span>
               </div>
@@ -96,8 +115,9 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
         </div>
       </div>
 
-      {/* Blog content */}
+      {/* Content */}
       <div className="container max-w-4xl mx-auto px-4 py-12">
+
         <article className="prose prose-lg md:prose-xl max-w-none prose-headings:text-gray-800 prose-p:text-gray-700 prose-blockquote:border-l-emerald-500 prose-blockquote:text-gray-700 prose-a:text-emerald-600 prose-a:no-underline hover:prose-a:text-emerald-700">
           {/* Blog intro */}
           {blog.content?.intro && (
@@ -133,21 +153,21 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
               <p className="mb-6">
                 E-waste consists of discarded electronic products such as computers, televisions, smartphones, and household appliances. These devices contain valuable materials like gold, silver, copper, and palladium, but also harmful substances including lead, mercury, cadmium, and brominated flame retardants.
               </p>
-              
+
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Environmental Impact</h2>
               <p className="mb-6">
                 Improper disposal of e-waste leads to serious environmental consequences. When electronic devices end up in landfills, toxic materials can leach into soil and groundwater, contaminating ecosystems and posing health risks to living organisms.
               </p>
-              
+
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Responsible Recycling</h2>
               <p className="mb-6">
                 Proper e-waste recycling involves specialized processes to safely extract valuable materials while containing hazardous components. Certified e-waste recycling facilities employ advanced techniques to dismantle electronics, separate materials, and process them for reuse.
               </p>
-              
+
               <blockquote className="border-l-4 border-emerald-500 pl-4 italic my-8">
                 &ldquo;The average smartphone contains about 60 different elements &ndash; including precious metals and rare earth elements &ndash; that could be recovered and reused if the device is properly recycled.&rdquo;
               </blockquote>
-              
+
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Consumer Responsibility</h2>
               <p className="mb-6">
                 Consumers play a crucial role in addressing the e-waste challenge. By extending the lifespan of devices through proper maintenance, choosing products with eco-friendly designs, and ensuring responsible disposal through certified recycling centers, individuals can significantly reduce e-waste&apos;s environmental footprint.
@@ -170,14 +190,14 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
         )}
 
         {/* Call to action box */}
-        <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-6 my-12">
-          <h3 className="text-xl font-bold text-emerald-800 mb-3">Ready to Take Action?</h3>
+        <div className="bg-[#E8F5D4] border border-[#5A8807] rounded-lg p-6 my-12">
+          <h3 className="text-xl font-bold text-[#5A8807] mb-3">Ready to Take Action?</h3>
           <p className="text-gray-700 mb-4">
             Properly disposing of your electronic waste is easier than you think. Find certified e-waste recycling facilities near you and ensure your devices are handled responsibly.
           </p>
-          <Link 
-            href="/e-facilities" 
-            className="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors"
+          <Link
+            href="/facility-locator"
+            className="inline-flex items-center bg-[#5A8807] px-4 py-2 hover:bg-[#5A8807] text-white font-medium rounded-lg transition-colors"
           >
             Find Nearby Recycling Centers
             <svg className="ml-2 -mr-1 w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd"></path></svg>
@@ -211,44 +231,65 @@ const Blog: React.FC<BlogPageProps> = ({ params }) => {
           </div>
         </div>
 
-        {/* Related articles section */}
+        {/* Related Articles */}
         <div className="mt-16 border-t border-gray-200 pt-12">
-          <h3 className="text-2xl font-bold text-gray-800 mb-8">Related Articles</h3>
+          <h3 className="text-2xl font-bold text-gray-800 mb-8">
+            Related Articles
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {relatedBlogs.length > 0 ? (
               relatedBlogs.map((relatedBlog) => (
-                <div 
-                  key={relatedBlog.id} 
+                <div
+                  key={relatedBlog.id}
                   className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 flex flex-col h-full transform hover:-translate-y-1"
                 >
                   <div className="relative h-48 overflow-hidden">
-                    <Image
+                    <img
                       src={relatedBlog.image}
                       alt={relatedBlog.title}
-                      width={400}
-                      height={225}
                       className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
                     />
-                    <div className="absolute bottom-0 left-0 bg-gradient-to-t from-black/60 to-transparent w-full h-16"></div>
+                    <div className="absolute bottom-0 left-0 bg-gradient-to-t from-black/60 to-transparent w-full h-16" />
                   </div>
                   <div className="p-5 flex flex-col flex-grow">
-                    <span className="bg-emerald-100 text-emerald-800 text-xs font-medium px-2.5 py-0.5 rounded inline-block mb-3 w-fit">
+                    <span
+                      className="text-xs font-medium px-2.5 py-0.5 rounded inline-block mb-3 w-fit"
+                      style={{ backgroundColor: PRIMARY_LIGHT, color: PRIMARY }}
+                    >
                       {relatedBlog.category}
                     </span>
-                    <h4 className="text-lg font-bold text-gray-800 mb-2 line-clamp-2">{relatedBlog.title}</h4>
-                    <p className="text-gray-600 mb-4 text-sm line-clamp-2">{relatedBlog.description}</p>
+                    <h4 className="text-lg font-bold text-gray-800 mb-2 line-clamp-2">
+                      {relatedBlog.title}
+                    </h4>
+                    <p className="text-gray-600 mb-4 text-sm line-clamp-2">
+                      {relatedBlog.description}
+                    </p>
                     <Link
-                      href={`/education/${relatedBlog.id}`}
-                      className="mt-auto text-emerald-600 hover:text-emerald-800 inline-flex items-center font-medium text-sm"
+                      to={`/education/${relatedBlog.id}`}
+                      className="mt-auto inline-flex items-center font-medium text-sm"
+                      style={{ color: PRIMARY }}
                     >
                       Read Article
-                      <svg className="ml-1 w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"></path></svg>
+                      <svg
+                        className="ml-1 w-4 h-4"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
                     </Link>
                   </div>
                 </div>
               ))
             ) : (
-              <p className="col-span-3 text-center text-gray-500">No related articles found</p>
+              <p className="col-span-3 text-center text-gray-500">
+                No related articles found
+              </p>
             )}
           </div>
         </div>

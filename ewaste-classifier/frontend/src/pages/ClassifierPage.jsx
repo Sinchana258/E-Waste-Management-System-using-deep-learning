@@ -3,8 +3,8 @@ import axios from "axios";
 import UploadForm from "../components/UploadForm";
 import ResultCard from "../components/ResultCard";
 
-const PRIMARY = "#5a8807"; // main green
-const BG_LIGHT = "#E7F5D2"; // soft tint
+const PRIMARY = "#5a8807";
+const BG_LIGHT = "#E7F5D2";
 const BG_Lighter = "#F6FAEC";
 
 const ClassifyPage = () => {
@@ -83,8 +83,6 @@ const ClassifyPage = () => {
                             >
                                 Learn How It Works
                             </button>
-
-
                             <a
                                 href="/facility-locator"
                                 className="px-6 py-3 rounded-lg border"

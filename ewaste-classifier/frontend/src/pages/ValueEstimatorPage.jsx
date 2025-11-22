@@ -556,7 +556,7 @@ export default function ValueEstimatorPage() {
 
                             <a
                                 className="inline-block rounded-md px-4 py-2 text-sm bg-[#5a8807] text-white hover:bg-[#86c418]"
-                                href="/ewaste-marketplace"
+                                href="/marketplace"
                             >
                                 Post on Marketplace
                             </a>

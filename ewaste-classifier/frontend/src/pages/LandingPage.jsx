@@ -31,7 +31,7 @@ const features = [
         title: "Marketplace",
         desc: "Buy, sell or donate reusable electronics to extend product lifecycles.",
         icon: <FiSearch size={20} />,
-        to: "/ewaste-marketplace",
+        to: "/marketplace",
         protected: true,
     },
 ];
@@ -90,7 +90,7 @@ const LandingPage = () => {
                                 </button>
 
                                 <button
-                                    onClick={() => handleNavigate("/ewaste-marketplace", true)}
+                                    onClick={() => handleNavigate("/marketplace", true)}
                                     className="text-sm text-gray-700 underline px-3 py-2 rounded"
                                 >
                                     Visit Marketplace

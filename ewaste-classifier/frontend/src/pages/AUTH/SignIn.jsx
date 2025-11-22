@@ -3,8 +3,8 @@ import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import axios from "../utils/axiosInstance";
-import { useAuth } from "../hooks/useAuth";
+import axios from "../../utils/axiosInstance";
+import { useAuth } from "../../hooks/useAuth";
 
 const SignIn = () => {
   const navigate = useNavigate();
