@@ -15,13 +15,17 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from utils.inference import run_inference
 from database import bookings_collection
 from routes.valuation_routes import router as valuation_router
-
-
+from routes import listings, payments,orders 
+from routes import users
 load_dotenv()
 
 app = FastAPI()
 app.include_router(auth_router)
 app.include_router(valuation_router)
+app.include_router(listings.router)
+app.include_router(payments.router)
+app.include_router(orders.router)
+app.include_router(users.router)
 
 @app.get("/")
 def root():
